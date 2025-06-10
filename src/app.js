@@ -13,7 +13,7 @@ app.use('/api/usuarios', require('./routes/usuariosRoutes'));
 
 // Rutas
 app.get('/', (req, res) => {
-  res.send('🚀 RF Online backend funcionando');
+  res.send('🚀 RF Online backend funcionando como loco!');
 });
 
 // Acá se van a importar las rutas reales más adelante
