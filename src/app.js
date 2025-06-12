@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev')); 
-app.use('/api/usuarios', require('./routes/usuariosRoutes'));
+
 
 // Rutas
 app.get('/', (req, res) => {
@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
 });
 
 // Acá se van a importar las rutas reales más adelante
-// app.use('/api/usuarios', require('./routes/usuariosRoutes'));
-// app.use('/api/planificaciones', ...)
+app.use('/api/usuarios', require('./routes/usuariosRoutes'));
+app.use('/api/planificaciones', require('./routes/planificacionesRoutes'));
 
 module.exports = app;
