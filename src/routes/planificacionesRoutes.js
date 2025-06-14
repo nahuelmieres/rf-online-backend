@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const verificarToken = require('../middlewares/authMiddleware');
 const verificarRol = require('../middlewares/rolMiddleware');
-const { crearPlanificacion, obtenerPlanificaciones } = require('../controllers/planificacionesController');
+const { crearPlanificacion, obtenerPlanificaciones, obtenerPlanificacionPorId } = require('../controllers/planificacionesController');
+const { agregarBloqueASemana } = require('../controllers/bloquesController');
 
 router.post('/', verificarToken, verificarRol('coach', 'admin'), crearPlanificacion);
 
@@ -15,5 +16,9 @@ router.post('/coach-o-admin', verificarToken, verificarRol('coach', 'admin'), (r
 });
 
 router.get('/', verificarToken, obtenerPlanificaciones);
+
+router.post('/:idPlanificacion/semanas/:numeroSemana/bloques', verificarToken, verificarRol('coach', 'admin'), agregarBloqueASemana);
+
+router.get('/:id', verificarToken, obtenerPlanificacionPorId);
 
 module.exports = router;

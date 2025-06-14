@@ -19,5 +19,6 @@ app.get('/', (req, res) => {
 // Acá se van a importar las rutas reales más adelante
 app.use('/api/usuarios', require('./routes/usuariosRoutes'));
 app.use('/api/planificaciones', require('./routes/planificacionesRoutes'));
+app.use('/api/bloques', require('./routes/bloquesRoutes'));
 
 module.exports = app;
