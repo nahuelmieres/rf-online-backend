@@ -21,5 +21,6 @@ app.use('/api/usuarios', require('./routes/usuariosRoutes'));
 app.use('/api/planificaciones', require('./routes/planificacionesRoutes'));
 app.use('/api/bloques', require('./routes/bloquesRoutes'));
 app.use('/api/comentarios', require('./routes/comentariosRoutes'));
+app.use('/api/pagos', require('./routes/pagosRoutes'));
 
 module.exports = app;
