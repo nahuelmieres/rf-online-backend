@@ -20,8 +20,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Build frontend (cuando tengas Vite)
+# Build frontend (cuando tenga Vite)
 dist/
 
-# Coverage (si hacés tests)
+# Coverage (si hago tests)
 coverage/
