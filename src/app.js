@@ -7,9 +7,14 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+// New middleware para capturar el body original
+// Esto es necesario para validar firmas de webhooks de PayPal y MercadoPago
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf; // Guardo el body original para validación
+  }
+}));
 app.use(morgan('dev')); 
-
 
 // Rutas
 app.get('/', (req, res) => {
