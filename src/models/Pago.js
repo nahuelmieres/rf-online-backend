@@ -6,18 +6,30 @@ const pagoSchema = new mongoose.Schema({
     ref: 'Usuario',
     required: true
   },
-  preferenceId: {
+  externalId: { // preferenceId de MP o orderId de PayPal
     type: String,
     required: true
   },
+  paymentId: String, // ID del pago real confirmado
   estado: {
     type: String,
-    enum: ['pendiente', 'aprobado', 'rechazado'],
+    enum: ['pendiente', 'aprobado', 'rechazado', 'cancelado', 'completado', 'reembolsado'],
     default: 'pendiente'
   },
-  monto: Number,
-  moneda: String,
-  metodo: String,
+  monto: {
+    type: Number,
+    required: true
+  },
+  moneda: {
+    type: String,
+    enum: ['UYU', 'USD'],
+    default: 'UYU'
+  },
+  metodo: {
+    type: String,
+    enum: ['mercadopago', 'paypal'],
+    required: true
+  },
   fecha: {
     type: Date,
     default: Date.now

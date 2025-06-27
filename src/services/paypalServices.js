@@ -1,7 +1,10 @@
 const paypal = require('@paypal/checkout-server-sdk');
 const crypto = require('crypto');
+const https = require('https');
+const Pago = require('../models/Pago');
+const Usuario = require('../models/Usuario');
 
-// Configuro entorno de PayPal
+// Configuración del entorno
 const environment = process.env.NODE_ENV === 'production'
   ? new paypal.core.LiveEnvironment(
       process.env.PAYPAL_CLIENT_ID,
@@ -14,8 +17,8 @@ const environment = process.env.NODE_ENV === 'production'
 
 const client = new paypal.core.PayPalHttpClient(environment);
 
-// Creo la orden de pago
-const crearOrdenPaypal = async (monto) => {
+// Creo orden PayPal y guardo en DB
+const crearOrdenPaypal = async (usuario, monto) => {
   const request = new paypal.orders.OrdersCreateRequest();
   request.prefer('return=representation');
   request.requestBody({
@@ -38,47 +41,44 @@ const crearOrdenPaypal = async (monto) => {
   });
 
   const response = await client.execute(request);
-  return response.result;
+  const orden = response.result;
+
+  await Pago.create({
+    usuario: usuario.id,
+    externalId: orden.id,
+    estado: 'pendiente',
+    monto,
+    moneda: 'USD',
+    metodo: 'paypal'
+  });
+
+  return orden;
 };
 
-// Capturo la orden después de la aprobación del usuario
+// Capturo la orden PayPal y actualizo estado
 const capturarOrdenPaypal = async (orderId) => {
   const request = new paypal.orders.OrdersCaptureRequest(orderId);
   request.requestBody({});
   const response = await client.execute(request);
-  return response.result;
-};
+  const captura = response.result;
 
-// Valido firma de webhook de PayPal
-const validarFirmaWebhook = async (req) => {
-  const cabeceraFirma = req.headers['paypal-transmission-sig'];
-  const cabeceraTimestamp = req.headers['paypal-transmission-time'];
-  const cabeceraCertUrl = req.headers['paypal-cert-url'];
-  const cabeceraAlgoritmo = req.headers['paypal-auth-algo'];
-  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
-  
-  if (!cabeceraFirma || !cabeceraTimestamp || !cabeceraCertUrl || !cabeceraAlgoritmo) {
-    console.error('Cabeceras de verificación faltantes');
-    return false;
+  if (captura.status === 'COMPLETED') {
+    await Pago.findOneAndUpdate(
+      { externalId: orderId },
+      { estado: 'aprobado' }
+    );
+
+    const pago = await Pago.findOne({ externalId: orderId });
+    if (pago) {
+      await Usuario.findByIdAndUpdate(pago.usuario, { estadoPago: true });
+    }
   }
 
-  // Construyo mensaje para verificación
-  const mensajeVerificacion = `${cabeceraTimestamp}|${webhookId}|${req.rawBody}`;
-  
-  // Verifico la firma
-  const verificar = crypto.createVerify('RSA-SHA256');
-  verificar.update(mensajeVerificacion);
-  
-  // Descargo certificado (en producción usar caché)
-  const certificado = await obtenerCertificado(cabeceraCertUrl);
-  
-  return verificar.verify(certificado, cabeceraFirma, 'base64');
+  return captura;
 };
 
-// Obtengo certificado desde URL de PayPal
+// Obtengo certificado remoto
 const obtenerCertificado = (url) => {
-  // En producción, tengo que implementar caché para evitar descargas repetidas
-  const https = require('https');
   return new Promise((resolve, reject) => {
     https.get(url, (resp) => {
       let data = '';
@@ -88,40 +88,68 @@ const obtenerCertificado = (url) => {
   });
 };
 
-// Proceso notificaciones de webhook
+// Valido la firma del webhook
+const validarFirmaWebhook = async (req) => {
+  const sig = req.headers['paypal-transmission-sig'];
+  const time = req.headers['paypal-transmission-time'];
+  const certUrl = req.headers['paypal-cert-url'];
+  const algo = req.headers['paypal-auth-algo'];
+  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+
+  if (!sig || !time || !certUrl || !algo) {
+    console.error('Faltan headers para validar la firma');
+    return false;
+  }
+
+  const body = req.rawBody;
+  const mensaje = `${time}|${webhookId}|${body}`;
+
+  const verify = crypto.createVerify('RSA-SHA256');
+  verify.update(mensaje);
+
+  const cert = await obtenerCertificado(certUrl);
+  return verify.verify(cert, sig, 'base64');
+};
+
+// Proceso evento del webhook
 const procesarWebhookPaypal = async (req, res) => {
   try {
-    // Valido firma primero
-    const esValido = await validarFirmaWebhook(req);
-    if (!esValido) {
-      console.error('Firma de webhook inválida');
+    // Comentar para validar firma del webhook
+    // const valido = true; 
+    // Comentar para pruebas sin firma
+    const valido = await validarFirmaWebhook(req);
+    if (!valido) {
       return res.status(401).send('Firma inválida');
     }
 
-    // Proceso evento según tipo
-    const tipoEvento = req.body.event_type;
-    const recurso = req.body.resource;
-    
-    switch(tipoEvento) {
-      case 'PAYMENT.CAPTURE.COMPLETED':
-        // Manejo pago completado
-        console.log('Pago capturado:', recurso.id);
-        await actualizarEstadoPago(recurso.id, 'completado');
-        break;
-        
-      case 'PAYMENT.CAPTURE.DENIED':
-        // Manejo pago rechazado
-        console.log('Pago rechazado:', recurso.id);
-        await actualizarEstadoPago(recurso.id, 'rechazado');
-        break;
-        
-      default:
-        console.log('Evento no manejado:', tipoEvento);
+    const { event_type, resource } = req.body;
+
+    if (event_type === 'PAYMENT.CAPTURE.COMPLETED') {
+      await Pago.findOneAndUpdate(
+        { externalId: resource.supplementary_data.related_ids.order_id },
+        { estado: 'aprobado' }
+      );
+
+      const pago = await Pago.findOne({ externalId: resource.supplementary_data.related_ids.order_id });
+      if (pago) {
+        await Usuario.findByIdAndUpdate(pago.usuario, { estadoPago: true });
+      }
+
+      console.log('Pago aprobado por webhook:', resource.id);
+    }
+
+    if (event_type === 'PAYMENT.CAPTURE.DENIED') {
+      await Pago.findOneAndUpdate(
+        { externalId: resource.supplementary_data.related_ids.order_id },
+        { estado: 'rechazado' }
+      );
+
+      console.log('Pago rechazado por webhook:', resource.id);
     }
 
     res.sendStatus(200);
   } catch (error) {
-    console.error('Error en webhook PayPal:', error);
+    console.error('Error procesando webhook PayPal:', error);
     res.sendStatus(500);
   }
 };
