@@ -79,7 +79,39 @@ const loginUsuario = async (req, res) => {
   }
 };
 
+const asignarPlanificacion = async (req, res) => {
+  try {
+    const usuario = await Usuario.findById(req.usuario.id);
+    if (!usuario) return res.status(404).json({ msg: 'Usuario no encontrado' });
+
+    usuario.planificacion = req.params.idPlan;
+    await usuario.save();
+
+    res.json({ mensaje: 'Planificación asignada correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
+const obtenerPerfil = async (req, res) => {
+  try {
+    const usuario = await Usuario.findById(req.usuario.id)
+      .select('-password') // Excluyo la contraseña del perfil
+      .populate('planificacion'); // Incluyo la Planificación
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+    res.json(usuario);
+  } catch (error) {
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
 module.exports = {
   registrarUsuario,
-  loginUsuario
+  loginUsuario,
+  asignarPlanificacion,
+  obtenerPerfil
 };
