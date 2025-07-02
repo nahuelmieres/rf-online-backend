@@ -97,17 +97,70 @@ const asignarPlanificacion = async (req, res) => {
 const obtenerPerfil = async (req, res) => {
   try {
     const usuario = await Usuario.findById(req.usuario.id)
-      .select('-password') // Excluyo la contraseña del perfil
-      .populate('planificacion'); // Incluyo la Planificación
+      .select('-password -__v')
+      .populate({
+        path: 'planificacion',
+        select: '-__v -comentarios',
+        populate: {
+          path: 'semanas.bloques',
+          select: '-__v -creadoPor -fechaCreacion',
+          model: 'Bloque'
+        }
+      });
+
     if (!usuario) {
-      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Usuario no encontrado' 
+      });
     }
-    res.json(usuario);
+
+    // Transformación simplificada
+    const respuesta = {
+      usuario: {
+        id: usuario._id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        estadoPago: usuario.estadoPago
+      },
+      planificacion: usuario.planificacion ? {
+        id: usuario.planificacion._id,
+        titulo: usuario.planificacion.titulo,
+        tipo: usuario.planificacion.tipo,
+        semanas: usuario.planificacion.semanas.map(semana => ({
+          numero: semana.numero,
+          bloques: semana.bloques.map(bloque => ({
+            id: bloque._id,
+            tipo: bloque.tipo,
+            contenido: bloque.tipo === 'texto' 
+              ? bloque.contenidoTexto 
+              : bloque.ejercicios.map(ejercicio => ({
+                  nombre: ejercicio.nombre,
+                  series: ejercicio.series,
+                  repeticiones: ejercicio.repeticiones,
+                  peso: ejercicio.peso,
+                  video: ejercicio.linkVideo?.replace('watch?v=', 'embed/')
+                }))
+          }))
+        }))
+      } : null
+    };
+
+    res.json({
+      success: true,
+      data: respuesta
+    });
+
   } catch (error) {
     console.error('Error al obtener perfil:', error);
-    res.status(500).json({ mensaje: 'Error del servidor' });
+    res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-}
+};
 
 module.exports = {
   registrarUsuario,
