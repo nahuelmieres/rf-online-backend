@@ -6,7 +6,7 @@ const { crearPlanificacion, obtenerPlanificaciones, obtenerPlanificacionPorId,
     eliminarBloqueDeSemana, eliminarPlanificacion, editarPlanificacion,
     obtenerBloquesDeSemana
  } = require('../controllers/planificacionesController');
-const { agregarBloqueASemana } = require('../controllers/bloquesController');
+const { agregarBloqueADia } = require('../controllers/bloquesController');
 
 router.post('/', verificarToken, verificarRol('coach', 'admin'), crearPlanificacion);
 
@@ -20,7 +20,8 @@ router.post('/coach-o-admin', verificarToken, verificarRol('coach', 'admin'), (r
 
 router.get('/', verificarToken, obtenerPlanificaciones);
 
-router.post('/:idPlanificacion/semanas/:numeroSemana/bloques', verificarToken, verificarRol('coach', 'admin'), agregarBloqueASemana);
+router.post('/:idPlanificacion/semanas/:numeroSemana/dias', verificarToken, verificarRol('coach', 'admin'), 
+agregarBloqueADia);
 
 router.get('/:id', verificarToken, obtenerPlanificacionPorId);
 
