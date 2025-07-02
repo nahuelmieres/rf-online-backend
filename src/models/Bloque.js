@@ -12,9 +12,8 @@ const ejercicioSchema = new mongoose.Schema({
     min: [1, 'Debe haber al menos 1 serie']
   },
   repeticiones: {
-    type: Number,
-    required: true,
-    min: [1, 'Debe haber al menos 1 repetición']
+    type: String,
+    required: true
   },
   peso: {
     type: String,
@@ -68,15 +67,6 @@ bloqueSchema.pre('validate', function(next) {
     this.invalidate('ejercicios', 'Debe incluir al menos un ejercicio');
   }
   next();
-});
-
-// Actualizar referencias en planificaciones al guardar
-bloqueSchema.post('save', async function(doc) {
-  await mongoose.model('Planificacion').updateMany(
-    { 'semanas.bloques': doc._id },
-    { $set: { 'semanas.$[].bloques.$[elem]': doc._id } },
-    { arrayFilters: [{ 'elem': doc._id }] }
-  );
 });
 
 module.exports = mongoose.model('Bloque', bloqueSchema);

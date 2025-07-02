@@ -25,45 +25,78 @@ const crearBloque = async (req, res) => {
     }
 };
 
-const agregarBloqueASemana = async (req, res) => {
-    const { idPlanificacion, numeroSemana } = req.params;
-    const { idBloque } = req.body;
+const agregarBloqueADia = async (req, res) => {
+  const { idPlanificacion, numeroSemana } = req.params;
+  const { idBloque, dia } = req.body;
 
-    try {
-        const plan = await Planificacion.findById(idPlanificacion);
-        if (!plan) return res.status(404).json({ mensaje: 'Planificación no encontrada' });
-
-        // Validar que el bloque existe
-        const bloque = await Bloque.findById(idBloque);
-        console.log('ID recibido:', idBloque);
-        if (!bloque) return res.status(404).json({ mensaje: 'Bloque no encontrado' });
-
-        // Vaidar que no exista el bloque en la semana
-        const semanaExistente = plan.semanas.find(s => s.numero === parseInt(numeroSemana));
-        if (semanaExistente &&
-            semanaExistente.bloques.some(b => b.toString() === idBloque)) {
-            return res.status(400).json({ mensaje: 'El bloque ya está agregado a esta semana' });
-        }
-        // Buscar o crear la semana
-        let semana = plan.semanas.find(s => s.numero === parseInt(numeroSemana));
-        if (!semana) {
-            semana = { numero: parseInt(numeroSemana), bloques: [] };
-            plan.semanas.push(semana);
-        }
-
-        // Agregar el bloque
-        semana.bloques.push(new mongoose.Types.ObjectId(idBloque));
-
-        await plan.save();
-        res.status(200).json({ mensaje: 'Bloque agregado a la semana', planificacion: plan });
-    } catch (error) {
-        console.error('Error al agregar bloque:', error);
-        res.status(500).json({ mensaje: 'Error del servidor' });
+  try {
+    // Valido los datos de entrada
+    if (!dia || !['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].includes(dia)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Día de la semana inválido' 
+      });
     }
+
+    const [plan, bloque] = await Promise.all([
+      mongoose.model('Planificacion').findById(idPlanificacion),
+      mongoose.model('Bloque').findById(idBloque)
+    ]);
+
+    if (!plan) throw new Error('Planificación no encontrada');
+    if (!bloque) throw new Error('Bloque no encontrado');
+
+    // Busco o creo semana
+    let semana = plan.semanas.find(s => s.numero === parseInt(numeroSemana));
+    if (!semana) {
+      semana = { numero: parseInt(numeroSemana), dias: [] };
+      plan.semanas.push(semana);
+    }
+
+    // Busco o creo día
+    let diaObj = semana.dias.find(d => d.nombre === dia);
+    if (!diaObj) {
+      diaObj = { nombre: dia, bloques: [] };
+      semana.dias.push(diaObj);
+    }
+
+    // Valido bloque duplicado
+    if (diaObj.bloques.some(b => b.toString() === idBloque)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este bloque ya está asignado al día'
+      });
+    }
+
+    // Asigno bloque
+    diaObj.bloques.push(new mongoose.Types.ObjectId(idBloque));
+
+    await plan.save();
+    
+    res.json({
+      success: true,
+      message: `Bloque asignado al ${dia}`,
+      data: {
+        semana: semana.numero,
+        dia: diaObj.nombre,
+        bloque: {
+          id: bloque._id,
+          tipo: bloque.tipo
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error del servidor'
+    });
+  }
 };
 
 
 module.exports = {
     crearBloque,
-    agregarBloqueASemana
+    agregarBloqueADia
 };

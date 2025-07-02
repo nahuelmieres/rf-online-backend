@@ -1,28 +1,101 @@
+const mongoose = require('mongoose');
 const Planificacion = require('../models/Planificacion');
 const Bloque = require('../models/Bloque');
 
+/*
+ * Crea una nueva planificación con semanas y días inicializados
+ * 
+ * @param {Object} req - Request object
+ * @param {string} req.body.titulo - Título de la planificación (obligatorio)
+ * @param {string} req.body.descripcion - Descripción opcional
+ * @param {string} req.body.tipo - Tipo de planificación (fuerza, hipertrofia, etc.)
+ * @param {number} [req.body.cantidadSemanas=2] - Número de semanas a crear (opcional)
+ * @param {Array} [req.body.diasPorSemana=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']] - Días a incluir
+ */
 const crearPlanificacion = async (req, res) => {
     try {
-        let { titulo, descripcion, tipo } = req.body;
+        let { titulo, descripcion, tipo, cantidadSemanas = 2, diasPorSemana } = req.body;
 
+        // Validaciones básicas
         if (!titulo || !tipo) {
-            return res.status(400).json({ mensaje: 'Título y tipo son obligatorios' });
+            return res.status(400).json({ 
+                success: false,
+                message: 'Título y tipo son obligatorios' 
+            });
         }
 
+        // Valido tipo
+        const tiposValidos = ['fuerza', 'hipertrofia', 'crossfit', 'running', 'hibrido', 'gap'];
         tipo = tipo.toLowerCase();
+        
+        if (!tiposValidos.includes(tipo)) {
+            return res.status(400).json({
+                success: false,
+                message: `Tipo inválido. Use uno de: ${tiposValidos.join(', ')}`
+            });
+        }
 
+        // Configuración de días por semana (valor por defecto: Lunes a Domingo)
+        const diasDefault = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        diasPorSemana = diasPorSemana || diasDefault;
+        
+        // Valido días
+        const diasValidos = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        const diasInvalidos = diasPorSemana.filter(d => !diasValidos.includes(d));
+        
+        if (diasInvalidos.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Días inválidos: ${diasInvalidos.join(', ')}. Use: ${diasValidos.join(', ')}`
+            });
+        }
+
+        // Creo estructura de semanas
+        const semanas = [];
+        for (let i = 1; i <= cantidadSemanas; i++) {
+            semanas.push({
+                numero: i,
+                dias: diasPorSemana.map(nombreDia => ({
+                    nombre: nombreDia,
+                    bloques: [],
+                    descanso: false
+                }))
+            });
+        }
+
+        // Crear la planificación
         const nuevaPlanificacion = new Planificacion({
-            titulo,
-            descripcion,
+            titulo: titulo.trim(),
+            descripcion: descripcion?.trim(),
             tipo,
+            semanas,
             creadoPor: req.usuario.id
         });
 
         const planificacionGuardada = await nuevaPlanificacion.save();
-        res.status(201).json(planificacionGuardada);
+
+        // Respuesta estructurada
+        res.status(201).json({
+            success: true,
+            message: 'Planificación creada exitosamente',
+            data: {
+                id: planificacionGuardada._id,
+                titulo: planificacionGuardada.titulo,
+                tipo: planificacionGuardada.tipo,
+                semanas: planificacionGuardada.semanas.length,
+                diasPorSemana: diasPorSemana.length,
+                fechaCreacion: planificacionGuardada.fechaCreacion,
+                diasIncluidos: diasPorSemana // Para que el frontend sepa qué días esperar
+            }
+        });
+
     } catch (error) {
-        console.error('Error al crear planificacion:', error);
-        res.status(500).json({ mensaje: 'Error del servidor' });
+        console.error('Error al crear planificación:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error del servidor al crear planificación',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 
@@ -50,25 +123,76 @@ const obtenerPlanificaciones = async (req, res) => {
     }
 }
 
+/*
+ * Obtiene una planificación completa por ID con bloques poblados y manejo automático de días de descanso
+ * 
+ * @param {string} id - ID de la planificación
+ * @returns {Object} Planificación con bloques poblados y días de descanso marcados
+ */
 const obtenerPlanificacionPorId = async (req, res) => {
     try {
+        // Valido ID
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'ID de planificación inválido' 
+            });
+        }
+
+        // Obtengo planificación base con creador poblado
         const planificacion = await Planificacion.findById(req.params.id)
             .populate('creadoPor', 'nombre email rol')
-            .lean(); // lo hace un objeto plano para modificarlo después
+            .lean();
 
         if (!planificacion) {
-            return res.status(404).json({ mensaje: 'Planificación no encontrada' });
+            return res.status(404).json({ 
+                success: false,
+                message: 'Planificación no encontrada' 
+            });
         }
 
-        // Hago el populate manual de bloques en cada semana
+        // Poblamos bloques y manejar días de descanso
         for (const semana of planificacion.semanas) {
-            semana.bloques = await Bloque.find({ _id: { $in: semana.bloques } });
+            for (const dia of semana.dias) {
+                // Poblamos bloques del día
+                if (dia.bloques && dia.bloques.length > 0) {
+                    dia.bloquesPoblados = await Bloque.find({ 
+                        _id: { $in: dia.bloques } 
+                    }).select('-__v -creadoPor -fechaCreacion').lean();
+                }
+                
+                // Auto-marcar como descanso si no tiene bloques
+                if (dia.bloques.length === 0 && dia.descanso === false) {
+                    dia.descanso = true;
+                }
+            }
+            
+            // Elimino array original de bloques para evitar confusión
+            delete semana.bloques;
         }
 
-        res.status(200).json(planificacion);
+        // Respuesta estructurada
+        res.status(200).json({
+            success: true,
+            data: {
+                ...planificacion,
+                totalSemanas: planificacion.semanas.length,
+                totalDias: planificacion.semanas.reduce((acc, semana) => acc + semana.dias.length, 0),
+                totalBloques: planificacion.semanas.reduce(
+                    (acc, semana) => acc + semana.dias.reduce(
+                        (sum, dia) => sum + (dia.bloquesPoblados?.length || 0), 0), 0),
+                totalDescansos: planificacion.semanas.reduce(
+                    (acc, semana) => acc + semana.dias.filter(d => d.descanso).length, 0)
+            }
+        });
+
     } catch (error) {
         console.error('Error al obtener planificación:', error);
-        res.status(500).json({ mensaje: 'Error del servidor' });
+        res.status(500).json({
+            success: false,
+            message: 'Error del servidor al obtener planificación',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 

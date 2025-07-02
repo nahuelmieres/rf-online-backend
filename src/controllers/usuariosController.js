@@ -40,7 +40,7 @@ const loginUsuario = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validar campos
+    // Valido campos
     if (!email || !password) {
       return res.status(400).json({ mensaje: 'Email y contraseña obligatorios' });
     }
@@ -55,7 +55,7 @@ const loginUsuario = async (req, res) => {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
 
-    // Crear payload para el token
+    // Creo payload para el token
     const payload = {
       id: usuario._id,
       email: usuario.email,
@@ -64,7 +64,7 @@ const loginUsuario = async (req, res) => {
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    // Excluir password del retorno
+    // Excluyo password del retorno
     const { password: _, ...usuarioSinPassword } = usuario.toObject();
 
     res.json({
@@ -102,7 +102,7 @@ const obtenerPerfil = async (req, res) => {
         path: 'planificacion',
         select: '-__v -comentarios',
         populate: {
-          path: 'semanas.bloques',
+          path: 'semanas.dias.bloques',
           select: '-__v -creadoPor -fechaCreacion',
           model: 'Bloque'
         }
@@ -115,7 +115,7 @@ const obtenerPerfil = async (req, res) => {
       });
     }
 
-    // Transformación simplificada
+    // Transformación de la respuesta
     const respuesta = {
       usuario: {
         id: usuario._id,
@@ -130,18 +130,22 @@ const obtenerPerfil = async (req, res) => {
         tipo: usuario.planificacion.tipo,
         semanas: usuario.planificacion.semanas.map(semana => ({
           numero: semana.numero,
-          bloques: semana.bloques.map(bloque => ({
-            id: bloque._id,
-            tipo: bloque.tipo,
-            contenido: bloque.tipo === 'texto' 
-              ? bloque.contenidoTexto 
-              : bloque.ejercicios.map(ejercicio => ({
-                  nombre: ejercicio.nombre,
-                  series: ejercicio.series,
-                  repeticiones: ejercicio.repeticiones,
-                  peso: ejercicio.peso,
-                  video: ejercicio.linkVideo?.replace('watch?v=', 'embed/')
-                }))
+          dias: semana.dias.map(dia => ({
+            nombre: dia.nombre,
+            descanso: dia.descanso,
+            bloques: dia.bloques.map(bloque => ({
+              id: bloque._id,
+              tipo: bloque.tipo,
+              contenido: bloque.tipo === 'texto' 
+                ? bloque.contenidoTexto 
+                : bloque.ejercicios.map(ejercicio => ({
+                    nombre: ejercicio.nombre,
+                    series: ejercicio.series,
+                    repeticiones: ejercicio.repeticiones,
+                    peso: ejercicio.peso,
+                    video: ejercicio.linkVideo?.replace('watch?v=', 'embed/')
+                  }))
+            }))
           }))
         }))
       } : null
