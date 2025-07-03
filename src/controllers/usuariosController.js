@@ -143,9 +143,78 @@ const obtenerPerfil = async (req, res) => {
   }
 };
 
+const obtenerUsuarios = async (req, res) => {
+  try {
+    // Valido que solo admin/coach puedan listar usuarios
+    if (req.usuario.rol !== 'admin' && req.usuario.rol !== 'coach') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permisos para esta acción'
+      });
+    }
+
+    // Construyo query dinámica
+    const { rol, estadoPago, search } = req.query;
+    const query = {};
+    
+    // Filtro por rol (si se necesita)
+    if (rol) {
+      query.rol = rol;
+    }
+
+    // Filtros adicionales
+    if (estadoPago) {
+      query.estadoPago = estadoPago;
+    }
+    
+    if (search) {
+      query.$or = [
+        { nombre: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Obtengo usuarios con paginación
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const [usuarios, total] = await Promise.all([
+      Usuario.find(query)
+        .select('-password -__v')
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Usuario.countDocuments(query)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        usuarios,
+        paginacion: {
+          total,
+          paginas: Math.ceil(total / limit),
+          paginaActual: page,
+          porPagina: limit
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error del servidor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   registrarUsuario,
   loginUsuario,
   asignarPlanificacion,
-  obtenerPerfil
+  obtenerPerfil,
+  obtenerUsuarios 
 };
