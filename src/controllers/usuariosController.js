@@ -96,17 +96,14 @@ const asignarPlanificacion = async (req, res) => {
 
 const obtenerPerfil = async (req, res) => {
   try {
+    // Obtener solo datos básicos del usuario + referencia a planificación
     const usuario = await Usuario.findById(req.usuario.id)
       .select('-password -__v')
       .populate({
         path: 'planificacion',
-        select: '-__v -comentarios',
-        populate: {
-          path: 'semanas.dias.bloques',
-          select: '-__v -creadoPor -fechaCreacion',
-          model: 'Bloque'
-        }
-      });
+        select: '_id titulo tipo' // Solo estos campos básicos
+      })
+      .lean();
 
     if (!usuario) {
       return res.status(404).json({ 
@@ -115,7 +112,7 @@ const obtenerPerfil = async (req, res) => {
       });
     }
 
-    // Transformación de la respuesta
+    // Respuesta simplificada
     const respuesta = {
       usuario: {
         id: usuario._id,
@@ -127,27 +124,7 @@ const obtenerPerfil = async (req, res) => {
       planificacion: usuario.planificacion ? {
         id: usuario.planificacion._id,
         titulo: usuario.planificacion.titulo,
-        tipo: usuario.planificacion.tipo,
-        semanas: usuario.planificacion.semanas.map(semana => ({
-          numero: semana.numero,
-          dias: semana.dias.map(dia => ({
-            nombre: dia.nombre,
-            descanso: dia.descanso,
-            bloques: dia.bloques.map(bloque => ({
-              id: bloque._id,
-              tipo: bloque.tipo,
-              contenido: bloque.tipo === 'texto' 
-                ? bloque.contenidoTexto 
-                : bloque.ejercicios.map(ejercicio => ({
-                    nombre: ejercicio.nombre,
-                    series: ejercicio.series,
-                    repeticiones: ejercicio.repeticiones,
-                    peso: ejercicio.peso,
-                    video: ejercicio.linkVideo?.replace('watch?v=', 'embed/')
-                  }))
-            }))
-          }))
-        }))
+        tipo: usuario.planificacion.tipo
       } : null
     };
 
