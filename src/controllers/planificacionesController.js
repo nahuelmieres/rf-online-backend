@@ -103,25 +103,63 @@ const obtenerPlanificaciones = async (req, res) => {
     try {
         const filtros = {};
 
-        // Si se pasan filtros, los agregamos al objeto de búsqueda
-        if (req.query.tipo) {
-            filtros.tipo = req.query.tipo;
-        }
+        if (req.query.tipo) filtros.tipo = req.query.tipo;
+        if (req.query.creadoPor) filtros.creadoPor = req.query.creadoPor;
 
-        if (req.query.creadoPor) {
-            filtros.creadoPor = req.query.creadoPor;
-        }
-
-        const planificaciones = await Planificacion.find(filtros)
+        // Obtener planificaciones base
+        let planificaciones = await Planificacion.find(filtros)
             .populate('creadoPor', 'nombre email')
-            .sort({ fechaCreacion: -1 });
+            .sort({ fechaCreacion: -1 })
+            .lean();
+
+        // Poblar bloques para cada planificación
+        planificaciones = await Promise.all(planificaciones.map(async (plan) => {
+            // Poblar bloques para cada día de cada semana
+            const semanasConBloques = await Promise.all(plan.semanas.map(async (semana) => {
+                const diasConBloques = await Promise.all(semana.dias.map(async (dia) => {
+                    if (dia.bloques?.length > 0) {
+                        const bloquesPoblados = await Bloque.find({ 
+                            _id: { $in: dia.bloques } 
+                        }).select('nombre tipo ejercicios').lean();
+                        
+                        return {
+                            ...dia,
+                            bloquesPoblados,
+                            tieneBloques: bloquesPoblados.length > 0
+                        };
+                    }
+                    return {
+                        ...dia,
+                        bloquesPoblados: [],
+                        tieneBloques: false
+                    };
+                }));
+                
+                return {
+                    ...semana,
+                    dias: diasConBloques
+                };
+            }));
+            
+            return {
+                ...plan,
+                semanas: semanasConBloques,
+                totalBloques: semanasConBloques.reduce(
+                    (total, semana) => total + semana.dias.reduce(
+                        (sum, dia) => sum + (dia.bloquesPoblados?.length || 0), 0), 0)
+            };
+        }));
 
         res.status(200).json(planificaciones);
     } catch (error) {
         console.error('Error al obtener planificaciones:', error);
-        res.status(500).json({ mensaje: 'Error del servidor' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-}
+};
 
 /*
  * Obtiene una planificación completa por ID con bloques poblados y manejo automático de días de descanso

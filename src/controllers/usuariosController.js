@@ -145,11 +145,6 @@ const obtenerPerfil = async (req, res) => {
 
 const obtenerUsuarios = async (req, res) => {
   try {
-    // Valido permisos
-    if (req.usuario.rol !== 'admin' && req.usuario.rol !== 'coach') {
-      return res.status(403).json({ success: false, message: 'No autorizado' });
-    }
-
     const { rol, estadoPago, search, nombre, email } = req.query;
     const query = {};
     
