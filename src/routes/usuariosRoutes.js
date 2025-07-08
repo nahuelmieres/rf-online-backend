@@ -13,6 +13,6 @@ router.get('/perfil', verificarToken, obtenerPerfil);
 
 router.put('/asignar-plan/:idPlan', verificarToken, verificarRol('admin', 'coach'), asignarPlanificacion);
 
-router.get('/clientes', verificarToken, verificarRol('admin', 'coach'), obtenerUsuarios);
+router.get('/clientes', verificarToken, obtenerUsuarios);
 
 module.exports = router;
