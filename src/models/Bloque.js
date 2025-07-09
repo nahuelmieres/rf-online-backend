@@ -27,6 +27,12 @@ const ejercicioSchema = new mongoose.Schema({
 }, { _id: false });
 
 const bloqueSchema = new mongoose.Schema({
+  titulo: {
+    type: String,
+    required: [true, 'El título del bloque es obligatorio'],
+    trim: true,
+    maxlength: [100, 'El título no puede tener más de 100 caracteres']
+  },
   tipo: {
     type: String,
     enum: {
@@ -41,6 +47,12 @@ const bloqueSchema = new mongoose.Schema({
     trim: true
   },
   ejercicios: [ejercicioSchema],
+  etiquetas: [{
+    type: String,
+    trim: true,
+    lowercase: true,
+    maxlength: 30
+  }],
   creadoPor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Usuario',
@@ -52,7 +64,7 @@ const bloqueSchema = new mongoose.Schema({
     default: Date.now,
     immutable: true
   }
-}, { 
+}, {
   strict: 'throw',
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
