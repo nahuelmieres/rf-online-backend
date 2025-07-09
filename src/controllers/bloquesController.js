@@ -4,16 +4,22 @@ const Planificacion = require('../models/Planificacion');
 
 const crearBloque = async (req, res) => {
   try {
-    const { tipo, contenidoTexto, ejercicios } = req.body;
+    const { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
+
+    if (!titulo || titulo.trim() === '') {
+      return res.status(400).json({ mensaje: 'El título del bloque es obligatorio' });
+    }
 
     if (!tipo || (tipo !== 'texto' && tipo !== 'ejercicios' || tipo.trim() === '')) {
-      return res.status(400).json({ mensaje: 'Tipo de bloque es obligatorio y debe ser "texto" o "ejercicios"' });
+      return res.status(400).json({ mensaje: 'Tipo de bloque inválido' });
     }
 
     const nuevoBloque = new Bloque({
+      titulo,
       tipo,
       contenidoTexto,
       ejercicios,
+      etiquetas,
       creadoPor: req.usuario.id
     });
 
