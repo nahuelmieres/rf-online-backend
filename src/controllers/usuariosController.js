@@ -1,4 +1,5 @@
 const Usuario = require('../models/Usuario');
+const Planificacion = require('../models/Planificacion');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
@@ -80,19 +81,26 @@ const loginUsuario = async (req, res) => {
 };
 
 const asignarPlanificacion = async (req, res) => {
-  try {
-    const usuario = await Usuario.findById(req.usuario.id);
-    if (!usuario) return res.status(404).json({ msg: 'Usuario no encontrado' });
+  const { idUsuario, idPlan } = req.params;
 
-    usuario.planificacion = req.params.idPlan;
+  try {
+    const usuario = await Usuario.findById(idUsuario);
+    if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+
+    // Valido existencia de planificación
+    const planificacion = await Planificacion.findById(idPlan);
+    if (!planificacion) return res.status(404).json({ mensaje: 'Planificación no encontrada' });
+
+    usuario.planificacion = idPlan;
     await usuario.save();
 
     res.json({ mensaje: 'Planificación asignada correctamente' });
   } catch (error) {
-    console.error(error);
+    console.error('Error en asignarPlanificacion:', error);
     res.status(500).json({ mensaje: 'Error del servidor' });
   }
-}
+};
+
 
 const obtenerPerfil = async (req, res) => {
   try {
@@ -106,9 +114,9 @@ const obtenerPerfil = async (req, res) => {
       .lean();
 
     if (!usuario) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Usuario no encontrado' 
+        message: 'Usuario no encontrado'
       });
     }
 
@@ -147,13 +155,13 @@ const obtenerUsuarios = async (req, res) => {
   try {
     const { rol, estadoPago, search, nombre, email } = req.query;
     const query = {};
-    
+
     // Filtros individuales
     if (rol) query.rol = rol;
     if (estadoPago) query.estadoPago = estadoPago;
     if (nombre) query.nombre = { $regex: nombre, $options: 'i' }; // Búsqueda exacta por nombre
     if (email) query.email = { $regex: email, $options: 'i' }; // Búsqueda exacta por email
-    
+
     // Búsqueda global (search)
     if (search) {
       query.$or = [
@@ -186,10 +194,47 @@ const obtenerUsuarios = async (req, res) => {
   }
 };
 
+const cambiarRolUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nuevoRol } = req.body;
+
+    // Preventivo: paso a minúsculas el rol
+    const rolNormalizado = nuevoRol.toLowerCase();
+
+    // Validaciones
+    const usuario = await Usuario.findById(id);
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+    if (usuario.rol === rolNormalizado) {
+      return res.status(400).json({ mensaje: 'El usuario ya tiene este rol' });
+    }
+    if (!['admin', 'coach', 'cliente'].includes(rolNormalizado)) {
+      return res.status(400).json({ mensaje: 'Rol inválido' });
+    }
+    const usuarioActualizado = await Usuario.findByIdAndUpdate(
+      id,
+      { rol: rolNormalizado },
+      { new: true, runValidators: true }
+    ).select('-password -__v');
+
+    res.json({
+      mensaje: 'Rol actualizado correctamente',
+      usuario: usuarioActualizado
+    });
+
+  } catch (error) {
+    console.error('Error al cambiar rol:', error);
+    return res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
 module.exports = {
   registrarUsuario,
   loginUsuario,
   asignarPlanificacion,
   obtenerPerfil,
-  obtenerUsuarios 
+  obtenerUsuarios,
+  cambiarRolUsuario
 };
