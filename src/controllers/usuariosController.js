@@ -39,7 +39,7 @@ const registrarUsuario = async (req, res) => {
 
 const loginUsuario = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
     // Valido campos
     if (!email || !password) {
@@ -60,10 +60,13 @@ const loginUsuario = async (req, res) => {
     const payload = {
       id: usuario._id,
       email: usuario.email,
-      rol: usuario.rol
+      rol: usuario.rol,
+      nombre: usuario.nombre
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // Duración extendida del token
+    const tokenDuration = rememberMe ? '30d' : '8h';
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: tokenDuration });
 
     // Excluyo password del retorno
     const { password: _, ...usuarioSinPassword } = usuario.toObject();
@@ -71,7 +74,9 @@ const loginUsuario = async (req, res) => {
     res.json({
       mensaje: 'Login exitoso',
       token,
-      usuario: usuarioSinPassword
+      usuario: usuarioSinPassword,
+      // Enviamos la duración para el frontend
+      tokenDuration: rememberMe ? 'long' : 'short'
     });
 
   } catch (error) {
@@ -153,7 +158,7 @@ const obtenerPerfil = async (req, res) => {
 
 const obtenerUsuarios = async (req, res) => {
   try {
-    const { rol, estadoPago, search, nombre, email } = req.query;
+    const { rol, estadoPago, search, nombre, email, id } = req.query;
     const query = {};
 
     // Filtros individuales
@@ -161,6 +166,7 @@ const obtenerUsuarios = async (req, res) => {
     if (estadoPago) query.estadoPago = estadoPago;
     if (nombre) query.nombre = { $regex: nombre, $options: 'i' }; // Búsqueda exacta por nombre
     if (email) query.email = { $regex: email, $options: 'i' }; // Búsqueda exacta por email
+    if (id) query._id = id; // Búsqueda por ID
 
     // Búsqueda global (search)
     if (search) {
