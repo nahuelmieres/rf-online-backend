@@ -73,7 +73,7 @@ const loginUsuario = async (req, res) => {
 
     res.json({
       mensaje: 'Login exitoso',
-      token,
+      token: token.toString(),
       usuario: usuarioSinPassword,
       // Enviamos la duración para el frontend
       tokenDuration: rememberMe ? 'long' : 'short'
