@@ -16,12 +16,26 @@ const comentarioSchema = new mongoose.Schema({
   },
   planificacion: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Planificacion'
+    ref: 'Planificacion',
+    required: true
   },
-  semana: Number, // opcional
-  bloque: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Bloque'
+  semana: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  dia: {
+    type: String,
+    enum: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
+    required: true
+  },
+  respuesta: {
+    texto: String,
+    autor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Usuario'
+    },
+    fecha: Date
   }
 });
 
