@@ -116,7 +116,7 @@ const obtenerPerfil = async (req, res) => {
         path: 'planificacion',
         select: '_id titulo tipo' // Solo estos campos básicos
       })
-      .lean();
+      .lean({ virtuals: true }); // Incluyo campos virtuales como estadoPago
 
     if (!usuario) {
       return res.status(404).json({

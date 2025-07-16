@@ -53,6 +53,14 @@ usuarioSchema.virtual('estadoPago').get(function () {
   return this.fechaVencimiento && this.fechaVencimiento > new Date();
 });
 
+// Habilito el método toJSON y toObject para que incluya el campo virtual
+usuarioSchema.set('toJSON', {
+  virtuals: true,
+});
+usuarioSchema.set('toObject', {
+  virtuals: true,
+});
+
 // Índices
 usuarioSchema.index({ email: 1 }, { unique: true });
 usuarioSchema.index({ planificacion: 1 });
