@@ -132,14 +132,15 @@ const obtenerPerfil = async (req, res) => {
         nombre: usuario.nombre,
         email: usuario.email,
         rol: usuario.rol,
-        estadoPago: usuario.estadoPago
+        estadoPago: usuario.estadoPago,
+        fechaVencimiento: usuario.fechaVencimiento ? usuario.fechaVencimiento.toISOString() : null,
       },
       planificacion: usuario.planificacion ? {
         id: usuario.planificacion._id,
         titulo: usuario.planificacion.titulo,
         tipo: usuario.planificacion.tipo
       } : null
-    };
+    }.toJSON();
 
     res.json({
       success: true,
