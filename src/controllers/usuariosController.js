@@ -140,7 +140,7 @@ const obtenerPerfil = async (req, res) => {
         titulo: usuario.planificacion.titulo,
         tipo: usuario.planificacion.tipo
       } : null
-    }.toJSON();
+    };
 
     res.json({
       success: true,
