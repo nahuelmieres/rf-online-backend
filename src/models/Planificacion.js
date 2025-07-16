@@ -34,11 +34,7 @@ const planificacionSchema = new mongoose.Schema({
       },
       bloques: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Bloque',
-        validate: {
-          validator: async v => await mongoose.model('Bloque').exists({ _id: v }),
-          message: 'El bloque referenciado no existe'
-        }
+        ref: 'Bloque'
       }],
       descanso: {
         type: Boolean,
@@ -64,34 +60,50 @@ const planificacionSchema = new mongoose.Schema({
   }
 }, { 
   toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Virtual para poblar bloques
-planificacionSchema.virtual('diasConBloques', {
-  ref: 'Bloque',
-  localField: 'semanas.dias.bloques',
-  foreignField: '_id'
+  toObject: { virtuals: true },
+  validateBeforeSave: true
 });
 
 // Middleware para snapshot del creador
 planificacionSchema.pre('save', async function(next) {
   if (this.isNew && !this.creadoPorSnapshot) {
-    const creador = await mongoose.model('Usuario').findById(this.creadoPor);
-    if (creador) {
-      this.creadoPorSnapshot = {
-        nombre: creador.nombre,
-        email: creador.email,
-        rol: creador.rol
-      };
+    try {
+      const creador = await mongoose.model('Usuario').findById(this.creadoPor);
+      if (creador) {
+        this.creadoPorSnapshot = {
+          nombre: creador.nombre,
+          email: creador.email,
+          rol: creador.rol
+        };
+      }
+      next();
+    } catch (error) {
+      next(error);
     }
+  } else {
+    next();
   }
-  next();
 });
+
+// Middleware para limpiar referencias cuando se elimina un bloque
+planificacionSchema.statics.limpiarReferencias = async function(bloqueId) {
+  await this.updateMany(
+    {},
+    { $pull: { "semanas.$[].dias.$[].bloques": bloqueId } }
+  );
+};
 
 // Índices para mejor performance
 planificacionSchema.index({ creadoPor: 1 });
 planificacionSchema.index({ tipo: 1 });
 planificacionSchema.index({ 'semanas.dias.nombre': 1 });
+planificacionSchema.index({ 'semanas.dias.bloques': 1 });
+
+// Middleware para eliminar referencias cuando se borra un bloque
+planificacionSchema.post('findOneAndDelete', async function(doc) {
+  if (doc) {
+    await mongoose.model('Planificacion').limpiarReferencias(doc._id);
+  }
+});
 
 module.exports = mongoose.model('Planificacion', planificacionSchema);
