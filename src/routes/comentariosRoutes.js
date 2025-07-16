@@ -6,7 +6,10 @@ const {
     responderComentario,
     obtenerComentariosPorPlan,
     eliminarComentario,
-    editarComentario
+    editarComentario,
+    editarRespuesta,
+    eliminarRespuesta,
+    obtenerRespuestasPorPlan
 } = require('../controllers/comentariosController');
 const verificarRol = require('../middlewares/rolMiddleware');
 
@@ -16,13 +19,22 @@ router.post('/', verificarToken, crearComentario);
 // Obtengo comentarios por planificación/semana/día
 router.get('/', verificarToken, obtenerComentariosPorPlan);
 
-// Respondo comentario
-router.put('/:id/responder', verificarToken, verificarRol('admin', 'coach'), responderComentario);
-
 // Elimino comentario
 router.delete('/:id', verificarToken, eliminarComentario);
 
 // Edito comentario
 router.put('/:id', verificarToken, editarComentario);
+
+// Respondo comentario
+router.post('/:id/responder', verificarToken, verificarRol('admin', 'coach'), responderComentario);
+
+// Edito respuesta de comentario
+router.put('/:id/respuesta', verificarToken, editarRespuesta);
+
+// Elimino respuesta de comentario
+router.delete('/:id/respuesta', verificarToken, eliminarRespuesta);
+
+// Obtengo respuestas por planificación y usuario
+router.get('/respuestas', verificarToken, verificarRol('admin', 'coach'), obtenerRespuestasPorPlan);
 
 module.exports = router;

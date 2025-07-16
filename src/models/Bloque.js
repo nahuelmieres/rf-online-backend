@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
 const ejercicioSchema = new mongoose.Schema({
-  nombre: { 
-    type: String, 
+  nombre: {
+    type: String,
     required: [true, 'El nombre del ejercicio es requerido'],
     trim: true
   },
@@ -51,7 +51,13 @@ const bloqueSchema = new mongoose.Schema({
     type: String,
     trim: true,
     lowercase: true,
-    maxlength: 30
+    maxlength: 30,
+    validate: {
+      validator: function (v) {
+        return v.trim().length > 0;
+      },
+      message: 'Las etiquetas no pueden estar vacías'
+    }
   }],
   creadoPor: {
     type: mongoose.Schema.Types.ObjectId,
@@ -71,12 +77,22 @@ const bloqueSchema = new mongoose.Schema({
 });
 
 // Validación condicional
-bloqueSchema.pre('validate', function(next) {
+bloqueSchema.pre('validate', function (next) {
   if (this.tipo === 'texto' && !this.contenidoTexto?.trim()) {
     this.invalidate('contenidoTexto', 'El contenido es requerido para bloques de texto');
   }
   if (this.tipo === 'ejercicios' && (!this.ejercicios || this.ejercicios.length === 0)) {
     this.invalidate('ejercicios', 'Debe incluir al menos un ejercicio');
+  }
+  next();
+});
+
+// Antes de guardar, filtramos etiquetas vacías
+bloqueSchema.pre('save', function(next) {
+  if (this.etiquetas && Array.isArray(this.etiquetas)) {
+    this.etiquetas = this.etiquetas
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
   }
   next();
 });

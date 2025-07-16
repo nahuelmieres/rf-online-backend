@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const Comentario = require('../models/Comentario');
+const Planificacion = require('../models/Planificacion');
+const Usuario = require('../models/Usuario');
 
 const crearComentario = async (req, res) => {
   try {
@@ -58,31 +60,6 @@ const crearComentario = async (req, res) => {
   }
 };
 
-const responderComentario = async (req, res) => {
-  try {
-    const comentario = await Comentario.findById(req.params.id);
-    if (!comentario) return res.status(404).json({ mensaje: 'Comentario no encontrado' });
-
-    const usuario = req.usuario;
-    if (!['coach', 'admin'].includes(usuario.rol)) {
-      return res.status(403).json({ mensaje: 'No autorizado para responder' });
-    }
-
-    comentario.respuesta = {
-      texto: req.body.texto,
-      autor: usuario.id,
-      fecha: new Date()
-    };
-
-    await comentario.save();
-    res.json({ mensaje: "Respuesta exitosa", data: comentario });
-
-  } catch (err) {
-    console.error('Error al responder comentario:', err);
-    res.status(500).json({ mensaje: 'Error del servidor' });
-  }
-};
-
 const obtenerComentariosPorPlan = async (req, res) => {
   try {
     const { planificacion, idUsuario } = req.query;
@@ -96,7 +73,9 @@ const obtenerComentariosPorPlan = async (req, res) => {
     filtro.autor = idUsuario.toString();
 
     const comentarios = await Comentario.find(filtro)
-      .populate('autor', 'nombre email rol')
+      .populate('autor', 'nombre')
+      .populate('respuesta', 'texto')
+      .populate('respuesta.autor', 'nombre')
       .sort({ creadoEn: -1 });
 
     res.status(200).json({ data: comentarios });
@@ -158,10 +137,119 @@ const editarComentario = async (req, res) => {
   }
 };
 
+const responderComentario = async (req, res) => {
+  try {
+    const comentario = await Comentario.findById(req.params.id);
+    if (!comentario) return res.status(404).json({ mensaje: 'Comentario no encontrado' });
+
+    const usuario = req.usuario;
+    if (!['coach', 'admin'].includes(usuario.rol)) {
+      return res.status(403).json({ mensaje: 'No autorizado para responder' });
+    }
+
+    if (!req.body.texto?.trim()) {
+      return res.status(400).json({ mensaje: 'La respuesta no puede estar vacía' });
+    }
+
+    comentario.respuesta = {
+      texto: req.body.texto,
+      autor: usuario.id,
+      fecha: new Date()
+    };
+
+    await comentario.save();
+    res.json({ mensaje: "Respuesta exitosa", data: comentario });
+
+  } catch (err) {
+    console.error('Error al responder comentario:', err);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
+// Editar respuesta de comentario
+const editarRespuesta = async (req, res) => {
+  try {
+    const comentario = await Comentario.findById(req.params.id);
+    if (!comentario) return res.status(404).json({ mensaje: 'Comentario no encontrado' });
+
+    if (!comentario.respuesta || !comentario.respuesta.autor || comentario.respuesta.autor.toString() !== req.usuario.id) {
+      return res.status(403).json({ mensaje: 'No autorizado para editar la respuesta' });
+    }
+
+    if (!req.body.texto?.trim()) {
+      return res.status(400).json({ mensaje: 'La respuesta no puede estar vacía' });
+    }
+
+    comentario.respuesta.texto = req.body.texto;
+    await comentario.save();
+
+    res.json({ mensaje: "Respuesta editada exitosamente", data: comentario });
+  } catch (err) {
+    console.error('Error al editar respuesta de comentario:', err);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
+// Eliminar respuesta de comentario
+const eliminarRespuesta = async (req, res) => {
+  try {
+    const comentario = await Comentario.findById(req.params.id);
+    if (!comentario) return res.status(404).json({ mensaje: 'Comentario no encontrado' });
+
+    if (!comentario.respuesta || !comentario.respuesta.autor || comentario.respuesta.autor.toString() !== req.usuario.id) {
+      return res.status(403).json({ mensaje: 'No autorizado para eliminar la respuesta' });
+    }
+
+    comentario.respuesta = null;
+    await comentario.save();
+
+    res.json({ mensaje: "Respuesta eliminada exitosamente", data: comentario });
+  } catch (err) {
+    console.error('Error al eliminar respuesta de comentario:', err);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
+// Obtener respuestas de una planificación
+const obtenerRespuestasPorPlan = async (req, res) => {
+  try {
+    const { planificacion, idUsuario } = req.query;
+    if (!planificacion) {
+      return res.status(400).json({ mensaje: 'Falta ID de Planificación para obtener respuestas' });
+    }
+
+    const planificacionExistente = await Planificacion.findById(planificacion);
+    if (!planificacionExistente) {
+      return res.status(404).json({ mensaje: 'Planificación no encontrada' });
+    }
+
+    const usuario = await Usuario.findById(idUsuario);
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+
+    const comentarios = await Comentario.find({
+      planificacion,
+      autor: usuario._id
+    })
+      .populate('autor', 'nombre email rol')
+      .populate('respuesta.autor', 'nombre')
+      .sort({ creadoEn: -1 });
+
+    res.status(200).json({ data: comentarios });
+  } catch (err) {
+    console.error('Error al obtener respuestas por planificación:', err);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
 module.exports = {
   crearComentario,
   responderComentario,
   obtenerComentariosPorPlan,
   eliminarComentario,
-  editarComentario
+  editarComentario,
+  editarRespuesta,
+  eliminarRespuesta,
+  obtenerRespuestasPorPlan
 };
