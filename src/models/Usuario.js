@@ -27,13 +27,13 @@ const usuarioSchema = new mongoose.Schema({
     },
     default: 'cliente'
   },
-  estadoPago: { 
-    type: Boolean, 
-    default: false 
-  },
   planificacion: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Planificacion' 
+  },
+  fechaVencimiento: {
+    type: Date,
+    default: null
   },
   fechaRegistro: { 
     type: Date, 
@@ -45,9 +45,16 @@ const usuarioSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Índices para mejor performance
+// Campo virtual: estadoPago
+usuarioSchema.virtual('estadoPago').get(function () {
+  if (this.rol === 'admin' || this.rol === 'coach') {
+    return true;
+  }
+  return this.fechaVencimiento && this.fechaVencimiento > new Date();
+});
+
+// Índices
 usuarioSchema.index({ email: 1 }, { unique: true });
 usuarioSchema.index({ planificacion: 1 });
-;
 
 module.exports = mongoose.model('Usuario', usuarioSchema);
