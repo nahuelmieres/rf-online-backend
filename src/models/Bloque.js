@@ -88,13 +88,26 @@ bloqueSchema.pre('validate', function (next) {
 });
 
 // Antes de guardar, filtramos etiquetas vacías
-bloqueSchema.pre('save', function(next) {
+bloqueSchema.pre('save', function (next) {
   if (this.etiquetas && Array.isArray(this.etiquetas)) {
     this.etiquetas = this.etiquetas
       .map(tag => tag.trim())
       .filter(tag => tag.length > 0);
   }
   next();
+});
+
+// Añadir esto al esquema de Bloque
+bloqueSchema.post('deleteOne', { document: true }, async function () {
+  try {
+    await mongoose.model('Planificacion').updateMany(
+      {},
+      { $pull: { "semanas.$[].dias.$[].bloques": this._id } }
+    );
+    console.log(`Referencias al bloque ${this._id} limpiadas en todas las planificaciones`);
+  } catch (error) {
+    console.error(`Error limpiando referencias del bloque ${this._id}:`, error);
+  }
 });
 
 module.exports = mongoose.model('Bloque', bloqueSchema);

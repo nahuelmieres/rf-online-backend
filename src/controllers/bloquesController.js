@@ -35,19 +35,18 @@ const agregarBloqueADia = async (req, res) => {
   const { idPlanificacion, numeroSemana } = req.params;
   const { idBloque, dia } = req.body;
 
-  // Validación más estricta de parámetros
-  if (!mongoose.Types.ObjectId.isValid(idPlanificacion) ||
-    !mongoose.Types.ObjectId.isValid(idBloque)) {
+  // Validación básica
+  if (!mongoose.Types.ObjectId.isValid(idPlanificacion)) {
     return res.status(400).json({
       success: false,
-      message: 'ID de planificación o bloque inválido'
+      message: 'ID de planificación inválido'
     });
   }
 
-  if (isNaN(numeroSemana) || numeroSemana < 1) {
+  if (!mongoose.Types.ObjectId.isValid(idBloque)) {
     return res.status(400).json({
       success: false,
-      message: 'Número de semana inválido'
+      message: 'ID de bloque inválido'
     });
   }
 
@@ -59,93 +58,99 @@ const agregarBloqueADia = async (req, res) => {
     });
   }
 
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    // Verificación en paralelo más eficiente
-    const [planExistente, bloqueExistente] = await Promise.all([
-      Planificacion.findById(idPlanificacion),
-      Bloque.findById(idBloque).select('_id tipo')
-    ]);
-
-    if (!planExistente) {
-      return res.status(404).json({
-        success: false,
-        message: 'Planificación no encontrada'
-      });
-    }
-
+    // 1. Verificar existencia del bloque
+    const bloqueExistente = await mongoose.model('Bloque').findById(idBloque).session(session);
     if (!bloqueExistente) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Bloque no encontrado'
       });
     }
 
-    // Buscar o crear semana (usando Mongoose subdocuments)
-    let semana = planExistente.semanas.find(s => s.numero === parseInt(numeroSemana));
-    if (!semana) {
-      semana = { numero: parseInt(numeroSemana), dias: [] };
-      planExistente.semanas.push(semana);
+    // 2. Obtener planificación
+    const planificacion = await mongoose.model('Planificacion').findById(idPlanificacion).session(session);
+    if (!planificacion) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: 'Planificación no encontrada'
+      });
     }
 
-    // Buscar o crear día
+    // 3. Función para limpiar referencias inválidas
+    const limpiarBloquesInvalidos = (dias) => {
+      return dias.map(dia => ({
+        ...dia,
+        bloques: dia.bloques.filter(b => mongoose.Types.ObjectId.isValid(b))
+      }));
+    };
+
+    // 4. Encontrar o crear semana
+    let semana = planificacion.semanas.find(s => s.numero === parseInt(numeroSemana));
+    if (!semana) {
+      semana = { numero: parseInt(numeroSemana), dias: [] };
+      planificacion.semanas.push(semana);
+    }
+
+    // Limpiar bloques inválidos en todos los días de esta semana
+    semana.dias = limpiarBloquesInvalidos(semana.dias);
+
+    // 5. Encontrar o crear día
     let diaObj = semana.dias.find(d => d.nombre === dia);
     if (!diaObj) {
-      diaObj = {
-        nombre: dia,
-        bloques: [],
-        descanso: false // Asegurar valor por defecto
-      };
+      diaObj = { nombre: dia, bloques: [], descanso: false };
       semana.dias.push(diaObj);
     }
 
-    // Verificar duplicados usando toString()
-    const bloqueDuplicado = diaObj.bloques.some(b => b.toString() === idBloque);
-    if (bloqueDuplicado) {
-      return res.status(409).json({ // 409 Conflict es más semántico
+    // 6. Verificar duplicado
+    if (diaObj.bloques.some(b => b.toString() === idBloque)) {
+      await session.abortTransaction();
+      return res.status(409).json({
         success: false,
         message: 'El bloque ya está asignado a este día'
       });
     }
 
-    // Asignar bloque
-    diaObj.bloques.push(bloqueExistente._id);
-    diaObj.descanso = false; // Si era día de descanso, lo cambiamos
+    // 7. Asignar bloque
+    diaObj.bloques.push(new mongoose.Types.ObjectId(idBloque));
 
-    // Guardar con validación
-    await planExistente.save();
+    // 8. Guardar
+    await planificacion.save({ session });
 
-    // Respuesta detallada
+    // 9. Commit de transacción
+    await session.commitTransaction();
+
     res.json({
       success: true,
-      message: `Bloque ${bloqueExistente.tipo} asignado al ${dia}`,
+      message: `Bloque "${bloqueExistente.titulo}" asignado al ${dia}`,
       data: {
         planificacion: idPlanificacion,
         semana: semana.numero,
         dia,
-        bloquesCount: diaObj.bloques.length,
         bloque: {
           id: bloqueExistente._id,
+          titulo: bloqueExistente.titulo,
           tipo: bloqueExistente.tipo
         }
       }
     });
 
   } catch (error) {
-    console.error('Error en agregarBloqueADia:', error);
-
-    // Manejo específico para errores de validación de Mongoose
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Error de validación: ' + Object.values(error.errors).map(e => e.message).join(', ')
-      });
-    }
+    await session.abortTransaction();
+    console.error('Error crítico en agregarBloqueADia:', error);
 
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+      error: error.message
     });
+  } finally {
+    session.endSession();
   }
 };
 
