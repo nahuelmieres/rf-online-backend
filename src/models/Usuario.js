@@ -27,13 +27,14 @@ const usuarioSchema = new mongoose.Schema({
     },
     default: 'cliente'
   },
-  planificacion: { 
+  planPersonalizado: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Planificacion' 
+    ref: 'Planificacion',
+    default: null 
   },
   fechaVencimiento: {
     type: Date,
-    default: null
+    default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 días gratis por defecto
   },
   fechaRegistro: { 
     type: Date, 
