@@ -85,6 +85,7 @@ const loginUsuario = async (req, res) => {
   }
 };
 
+// Ahora se usa solo para planificaciones personalizadas
 const asignarPlanificacion = async (req, res) => {
   const { idUsuario, idPlan } = req.params;
 
@@ -96,12 +97,20 @@ const asignarPlanificacion = async (req, res) => {
     const planificacion = await Planificacion.findById(idPlan);
     if (!planificacion) return res.status(404).json({ mensaje: 'Planificación no encontrada' });
 
-    usuario.planificacion = idPlan;
+    console.log('Asignando planificación personalizada:', planificacion.categoria);
+    // Valido que sea una planificación de categoría personalizada
+    if (planificacion.categoria !== 'personalizada') {
+      return res.status(400).json({ mensaje: 'Solo se puede asignar una planificación personalizada' });
+    }
+    usuario.planPersonalizado = idPlan;
+    planificacion.usuarioAsignado = idUsuario; // Actualizo referencia en planificación
+    
+    await planificacion.save();
     await usuario.save();
 
-    res.json({ mensaje: 'Planificación asignada correctamente' });
+    res.json({ mensaje: 'Planificación personalizada asignada correctamente' });
   } catch (error) {
-    console.error('Error en asignarPlanificacion:', error);
+    console.error('Error en asignar Planificacion:', error);
     res.status(500).json({ mensaje: 'Error del servidor' });
   }
 };
@@ -113,7 +122,7 @@ const obtenerPerfil = async (req, res) => {
     const usuario = await Usuario.findById(req.usuario.id)
       .select('-password -__v')
       .populate({
-        path: 'planificacion',
+        path: 'planPersonalizado',
         select: '_id titulo tipo' // Solo estos campos básicos
       })
       .lean({ virtuals: true }); // Incluyo campos virtuales como estadoPago

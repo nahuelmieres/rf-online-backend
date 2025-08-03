@@ -14,13 +14,22 @@ const Bloque = require('../models/Bloque');
  */
 const crearPlanificacion = async (req, res) => {
     try {
-        let { titulo, descripcion, tipo, cantidadSemanas = 2, diasPorSemana } = req.body;
+        let { titulo, descripcion, tipo, cantidadSemanas = 2, diasPorSemana, categoria } = req.body;
 
         // Validaciones básicas
         if (!titulo || !tipo) {
             return res.status(400).json({ 
                 success: false,
                 message: 'Título y tipo son obligatorios' 
+            });
+        }
+
+        // Valido categoría
+        const categoriasValidas = ['basica', 'personalizada'];
+        if (categoria && !categoriasValidas.includes(categoria)) {
+            return res.status(400).json({
+                success: false,
+                message: `Categoría inválida. Use una de: ${categoriasValidas.join(', ')}`
             });
         }
 
@@ -69,7 +78,8 @@ const crearPlanificacion = async (req, res) => {
             descripcion: descripcion?.trim(),
             tipo,
             semanas,
-            creadoPor: req.usuario.id
+            creadoPor: req.usuario.id,
+            categoria: categoria
         });
 
         const planificacionGuardada = await nuevaPlanificacion.save();
@@ -85,7 +95,8 @@ const crearPlanificacion = async (req, res) => {
                 semanas: planificacionGuardada.semanas.length,
                 diasPorSemana: diasPorSemana.length,
                 fechaCreacion: planificacionGuardada.fechaCreacion,
-                diasIncluidos: diasPorSemana // Para que el frontend sepa qué días esperar
+                diasIncluidos: diasPorSemana, // Para que el frontend sepa qué días esperar
+                categoria: planificacionGuardada.categoria
             }
         });
 
@@ -104,6 +115,7 @@ const obtenerPlanificaciones = async (req, res) => {
         const filtros = {};
 
         if (req.query.tipo) filtros.tipo = req.query.tipo;
+        if (req.query.categoria) filtros.categoria = req.query.categoria;
         if (req.query.creadoPor) filtros.creadoPor = req.query.creadoPor;
 
         // Obtener planificaciones base
@@ -271,14 +283,14 @@ const eliminarPlanificacion = async (req, res) => {
 
 const editarPlanificacion = async (req, res) => {
     try {
-        const { titulo, descripcion, tipo, semanas } = req.body;
+        const { titulo, descripcion, tipo, semanas, categoria } = req.body;
 
         const noHayCamposParaActualizar =
             !titulo &&
             !descripcion &&
             !tipo &&
-            (!Array.isArray(semanas) || semanas.length === 0);
-            
+            (!Array.isArray(semanas) || semanas.length === 0) &&
+            !categoria;
         if (noHayCamposParaActualizar) {
             return res.status(400).json({ mensaje: 'Al menos un campo debe ser actualizado' });
         }
@@ -286,8 +298,6 @@ const editarPlanificacion = async (req, res) => {
         if (tipo && !['fuerza', 'hipertrofia', 'crossfit', 'running', 'hibrido', 'gap'].includes(tipo.toLowerCase())) {
             return res.status(400).json({ mensaje: 'Tipo de planificación inválido' });
         }
-        // Convertir tipo a minúsculas si se proporciona
-        const tipoLower = tipo ? tipo.toLowerCase() : null;
 
         // Buscar la planificación por ID
         if (!req.params.id) {
@@ -300,6 +310,13 @@ const editarPlanificacion = async (req, res) => {
         if (descripcion) plan.descripcion = descripcion;
         if (tipo) plan.tipo = tipo;
         if (req.body.semanas) plan.semanas = req.body.semanas;
+        if (categoria) {
+            const categoriasValidas = ['basica', 'personalizada'];
+            if (!categoriasValidas.includes(categoria)) {
+                return res.status(400).json({ mensaje: `Categoría inválida. Válidas: ${categoriasValidas.join(', ')}` });
+            }
+            plan.categoria = categoria;
+        }
 
         await plan.save();
         res.status(200).json({ mensaje: 'Planificación actualizada con éxito', planificacion: plan });

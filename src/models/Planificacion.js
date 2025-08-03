@@ -20,6 +20,20 @@ const planificacionSchema = new mongoose.Schema({
     },
     required: true
   },
+  categoria: {
+    type: String,
+    enum: {
+      values: ['basica', 'personalizada'],
+      message: 'Categoría inválida'
+    },
+    required: true,
+    default: 'basica'
+  },
+  usuarioAsignado: { // Referencia al usuario asignado UNICAMENTE EN PLANIFICACIONES PERSONALIZADAS
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Usuario',
+    default: null
+  },
   semanas: [{
     numero: {
       type: Number,
