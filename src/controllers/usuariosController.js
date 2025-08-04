@@ -46,7 +46,12 @@ const loginUsuario = async (req, res) => {
       return res.status(400).json({ mensaje: 'Email y contraseña obligatorios' });
     }
 
-    const usuario = await Usuario.findOne({ email });
+    const usuario = await Usuario.findOne({ email })
+    .populate({
+      path: 'planPersonalizado',
+      select: '_id titulo tipo' // Solo estos campos básicos
+    });
+
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
     }
@@ -61,7 +66,8 @@ const loginUsuario = async (req, res) => {
       id: usuario._id,
       email: usuario.email,
       rol: usuario.rol,
-      nombre: usuario.nombre
+      nombre: usuario.nombre,
+      planPersonalizado: usuario.planPersonalizado
     };
 
     // Duración extendida del token
@@ -104,7 +110,7 @@ const asignarPlanificacion = async (req, res) => {
     }
     usuario.planPersonalizado = idPlan;
     planificacion.usuarioAsignado = idUsuario; // Actualizo referencia en planificación
-    
+
     await planificacion.save();
     await usuario.save();
 
@@ -144,10 +150,10 @@ const obtenerPerfil = async (req, res) => {
         estadoPago: usuario.estadoPago,
         fechaVencimiento: usuario.fechaVencimiento ? usuario.fechaVencimiento.toISOString() : null,
       },
-      planificacion: usuario.planificacion ? {
-        id: usuario.planificacion._id,
-        titulo: usuario.planificacion.titulo,
-        tipo: usuario.planificacion.tipo
+      planificacion: usuario.planPersonalizado ? {
+        id: usuario.planPersonalizado._id,
+        titulo: usuario.planPersonalizado.titulo,
+        tipo: usuario.planPersonalizado.tipo
       } : null
     };
 
