@@ -40,7 +40,12 @@ const usuarioSchema = new mongoose.Schema({
     type: Date, 
     default: Date.now,
     immutable: true
-  }
+  },
+  aceptaTerminos: { 
+    type: Boolean, 
+    required: [true, 'Debe aceptar los términos y condiciones'],
+    immutable: true
+  },
 }, { 
   toJSON: { virtuals: true },
   toObject: { virtuals: true }

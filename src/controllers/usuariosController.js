@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 
 const registrarUsuario = async (req, res) => {
   try {
-    const { nombre, email, password, rol } = req.body;
+    const { nombre, email, password, rol = 'cliente', aceptaTerminos } = req.body;
 
     // Validaciones básicas
     if (!email || !password || !nombre) {
@@ -17,13 +17,19 @@ const registrarUsuario = async (req, res) => {
       return res.status(400).json({ mensaje: 'El usuario ya está registrado' });
     }
 
+    if(!aceptaTerminos) {
+      return res.status(400).json({ mensaje: 'Debe aceptar los términos y condiciones' });
+    }
+
+    // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const nuevoUsuario = new Usuario({
       nombre,
       email,
       password: hashedPassword,
-      rol
+      rol,
+      aceptaTerminos,
     });
 
     await nuevoUsuario.save();
