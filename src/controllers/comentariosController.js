@@ -130,6 +130,12 @@ const editarComentario = async (req, res) => {
     comentario.texto = texto;
     await comentario.save();
 
+    // Agrego a la respuesta, si existe, el autor de la respuesta
+    if (comentario.respuesta && comentario.respuesta.autor) {
+      await comentario.populate([{ path: 'autor', select: 'nombre email rol' },
+      { path: 'respuesta.autor', select: 'nombre' }]);
+    }
+
     res.json({ mensaje: "Comentario editado exitosamente", data: comentario });
   } catch (err) {
     console.error('Error al editar comentario:', err);
@@ -139,6 +145,7 @@ const editarComentario = async (req, res) => {
 
 const responderComentario = async (req, res) => {
   try {
+    console.log('Responder comentario:', req.params.id);
     const comentario = await Comentario.findById(req.params.id);
     if (!comentario) return res.status(404).json({ mensaje: 'Comentario no encontrado' });
 
@@ -181,6 +188,11 @@ const editarRespuesta = async (req, res) => {
     }
 
     comentario.respuesta.texto = req.body.texto;
+
+    // Agrego el autor de la respuesta
+    await comentario.populate([{ path: 'autor', select: 'nombre email rol' },
+    { path: 'respuesta.autor', select: 'nombre' }]);
+
     await comentario.save();
 
     res.json({ mensaje: "Respuesta editada exitosamente", data: comentario });
