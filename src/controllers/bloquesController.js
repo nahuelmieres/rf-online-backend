@@ -35,7 +35,7 @@ const agregarBloqueADia = async (req, res) => {
   const { idPlanificacion, numeroSemana } = req.params;
   const { idBloque, dia } = req.body;
 
-  // Validación básica
+  // Validación básica de IDs
   if (!mongoose.Types.ObjectId.isValid(idPlanificacion)) {
     return res.status(400).json({
       success: false,
@@ -50,6 +50,7 @@ const agregarBloqueADia = async (req, res) => {
     });
   }
 
+  // Validación de día
   const diasValidos = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   if (!diasValidos.includes(dia)) {
     return res.status(400).json({
@@ -62,8 +63,8 @@ const agregarBloqueADia = async (req, res) => {
   session.startTransaction();
 
   try {
-    // 1. Verificar existencia del bloque
-    const bloqueExistente = await mongoose.model('Bloque').findById(idBloque).session(session);
+    // 1. Verifico existencia del bloque
+    const bloqueExistente = await Bloque.findById(idBloque).session(session);
     if (!bloqueExistente) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -72,8 +73,8 @@ const agregarBloqueADia = async (req, res) => {
       });
     }
 
-    // 2. Obtener planificación
-    const planificacion = await mongoose.model('Planificacion').findById(idPlanificacion).session(session);
+    // 2. Obtengo planificación
+    const planificacion = await Planificacion.findById(idPlanificacion).session(session);
     if (!planificacion) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -85,55 +86,82 @@ const agregarBloqueADia = async (req, res) => {
     // 3. Función para limpiar referencias inválidas
     const limpiarBloquesInvalidos = (dias) => {
       return dias.map(dia => ({
-        ...dia,
-        bloques: dia.bloques.filter(b => mongoose.Types.ObjectId.isValid(b))
+        ...dia.toObject ? dia.toObject() : dia,
+        bloques: (dia.bloques || []).filter(b => mongoose.Types.ObjectId.isValid(b))
       }));
     };
 
-    // 4. Encontrar o crear semana
+    // 4. Configuración de días por semana
+    const diasPorSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+    // 5. Busco o creo la semana
     let semana = planificacion.semanas.find(s => s.numero === parseInt(numeroSemana));
+    const semanaNumero = parseInt(numeroSemana);
+
     if (!semana) {
-      semana = { numero: parseInt(numeroSemana), dias: [] };
+      // Creo nueva semana con estructura completa
+      semana = {
+        numero: semanaNumero,
+        dias: diasPorSemana.map(nombreDia => ({
+          nombre: nombreDia,
+          bloques: nombreDia === dia ? [new mongoose.Types.ObjectId(idBloque)] : [],
+          descanso: nombreDia !== dia
+        }))
+      };
       planificacion.semanas.push(semana);
-    }
+    } else {
+      // Semana existente - limpio referencias
+      semana.dias = limpiarBloquesInvalidos(semana.dias);
 
-    // Limpiar bloques inválidos en todos los días de esta semana
-    semana.dias = limpiarBloquesInvalidos(semana.dias);
-
-    // 5. Encontrar o crear día
-    let diaObj = semana.dias.find(d => d.nombre === dia);
-    if (!diaObj) {
-      diaObj = { nombre: dia, bloques: [], descanso: false };
-      semana.dias.push(diaObj);
-    }
-
-    // 6. Verificar duplicado
-    if (diaObj.bloques.some(b => b.toString() === idBloque)) {
-      await session.abortTransaction();
-      return res.status(409).json({
-        success: false,
-        message: 'El bloque ya está asignado a este día'
+      // Completo días faltantes si existen
+      diasPorSemana.forEach(nombreDia => {
+        if (!semana.dias.some(d => d.nombre === nombreDia)) {
+          semana.dias.push({
+            nombre: nombreDia,
+            bloques: [],
+            descanso: nombreDia !== dia
+          });
+        }
       });
+
+      // Ordeno días según configuración estándar
+      semana.dias.sort((a, b) => diasPorSemana.indexOf(a.nombre) - diasPorSemana.indexOf(b.nombre));
+
+      // Busco día específico
+      const diaObj = semana.dias.find(d => d.nombre === dia);
+      if (!diaObj) {
+        throw new Error(`Error interno: Día ${dia} no encontrado después de validación`);
+      }
+
+      // Verifico duplicado
+      if (diaObj.bloques.some(b => b.toString() === idBloque)) {
+        await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          message: 'El bloque ya está asignado a este día'
+        });
+      }
+
+      // Asigno bloque
+      diaObj.bloques.push(new mongoose.Types.ObjectId(idBloque));
+      diaObj.descanso = false;
     }
 
-    // 7. Asignar bloque
-    diaObj.bloques.push(new mongoose.Types.ObjectId(idBloque));
-
-    // 8. Guardar
+    // 6. Guardo cambios
+    planificacion.markModified('semanas');
     await planificacion.save({ session });
-
-    // 9. Commit de transacción
     await session.commitTransaction();
 
+    // 7. Preparo respuesta exitosa
     res.json({
       success: true,
-      message: `Bloque "${bloqueExistente.titulo}" asignado al ${dia}`,
+      message: `Bloque "${bloqueExistente.titulo}" asignado al ${dia} (Semana ${semanaNumero})`,
       data: {
-        planificacion: idPlanificacion,
-        semana: semana.numero,
+        planificacionId: idPlanificacion,
+        semana: semanaNumero,
         dia,
         bloque: {
-          id: bloqueExistente._id,
+          id: idBloque,
           titulo: bloqueExistente.titulo,
           tipo: bloqueExistente.tipo
         }
@@ -142,12 +170,12 @@ const agregarBloqueADia = async (req, res) => {
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('Error crítico en agregarBloqueADia:', error);
-
+    console.error('Error en agregarBloqueADia:', error);
+    
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     session.endSession();
