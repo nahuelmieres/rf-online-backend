@@ -97,7 +97,7 @@ const loginUsuario = async (req, res) => {
   }
 };
 
-// Ahora se usa solo para planificaciones personalizadas
+// v2: Ahora se usa solo para planificaciones personalizadas
 const asignarPlanificacion = async (req, res) => {
   const { idUsuario, idPlan } = req.params;
 
@@ -109,7 +109,6 @@ const asignarPlanificacion = async (req, res) => {
     const planificacion = await Planificacion.findById(idPlan);
     if (!planificacion) return res.status(404).json({ mensaje: 'Planificación no encontrada' });
 
-    console.log('Asignando planificación personalizada:', planificacion.categoria);
     // Valido que sea una planificación de categoría personalizada
     if (planificacion.categoria !== 'personalizada') {
       return res.status(400).json({ mensaje: 'Solo se puede asignar una planificación personalizada' });
