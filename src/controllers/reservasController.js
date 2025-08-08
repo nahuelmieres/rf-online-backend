@@ -161,9 +161,41 @@ const eliminarReserva = async (req, res) => {
     }
 };
 
+// Obtener todas las reservas (solo para admin y coach), con paginación y filtro por fecha
+const obtenerTodasReservas = async (req, res) => {
+    const { fecha, sucursal, tipo } = req.query;
+
+    try {
+        const query = { estado: 'activa' };
+
+        if (fecha) {
+            const fechaObj = new Date(fecha);
+            query.fecha = { $gte: new Date(fechaObj.setHours(0, 0, 0, 0)), $lt: new Date(fechaObj.setHours(23, 59, 59, 999)) };
+        }
+
+        if (sucursal) {
+            query.sucursal = sucursal;
+        }
+
+        if (tipo) {
+            query.tipo = tipo;
+        }
+
+        const reservas = await Reserva.find(query)
+            .populate('usuario', 'nombre email') // Popula solo los campos necesarios
+            .sort({ fecha: 1 });
+
+        res.json(reservas);
+    } catch (error) {
+        console.error('Error al obtener todas las reservas:', error);
+        res.status(500).json({ error: 'Error al obtener reservas' });
+    }
+};
+
 module.exports = {
     obtenerDisponibilidad,
     crearReserva,
     obtenerMisReservas,
-    eliminarReserva
+    eliminarReserva,
+    obtenerTodasReservas
 };
