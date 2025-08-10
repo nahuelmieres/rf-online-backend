@@ -11,9 +11,9 @@ function esfuerzoValidator(v) {
   const escala = (this.escala || '').toUpperCase();
   if (!Number.isFinite(v)) return false;
 
-  // Ajustá rangos si preferís otra convención
+  // Ajustar rangos si se prefiere otra convención
   if (escala === 'RIR') return v >= 0 && v <= 5;
-  if (escala === 'RPE') return v >= 1 && v <= 10; // si se quiere cambiar a 6–10, cambiar acá
+  if (escala === 'RPE') return v >= 1 && v <= 10; // ej.: si se quiere cambiar a 6–10, cambiar acá
   return true;
 }
 
