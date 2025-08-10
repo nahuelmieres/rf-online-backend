@@ -4,14 +4,81 @@ const Planificacion = require('../models/Planificacion');
 
 const crearBloque = async (req, res) => {
   try {
-    const { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
+    let { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
 
-    if (!titulo || titulo.trim() === '') {
+    // Sanitizados básicos
+    titulo = (titulo ?? '').trim();
+    tipo = (tipo ?? '').trim(); // 'texto' | 'ejercicios'
+
+    if (!titulo) {
       return res.status(400).json({ mensaje: 'El título del bloque es obligatorio' });
     }
 
-    if (!tipo || (tipo !== 'texto' && tipo !== 'ejercicios' || tipo.trim() === '')) {
+    if (!['texto', 'ejercicios'].includes(tipo)) {
       return res.status(400).json({ mensaje: 'Tipo de bloque inválido' });
+    }
+
+    // Normalizar etiquetas
+    if (Array.isArray(etiquetas)) {
+      etiquetas = [...new Set(
+        etiquetas
+          .map(e => (e ?? '').toString().trim().toLowerCase())
+          .filter(e => e.length > 0 && e.length <= 30)
+      )];
+    } else {
+      etiquetas = [];
+    }
+
+    // Si es bloque de texto, me aseguro contenido y vaciamos ejercicios
+    if (tipo === 'texto') {
+      contenidoTexto = (contenidoTexto ?? '').toString().trim();
+      if (!contenidoTexto) {
+        return res.status(400).json({ mensaje: 'El contenido es requerido para bloques de texto' });
+      }
+      ejercicios = []; // evita guardar basura accidental
+    }
+
+    // Si es bloque de ejercicios, valido y normalizamos ejercicios
+    if (tipo === 'ejercicios') {
+      if (!Array.isArray(ejercicios) || ejercicios.length === 0) {
+        return res.status(400).json({ mensaje: 'Debe incluir al menos un ejercicio' });
+      }
+
+      ejercicios = ejercicios.map((e, idx) => {
+        const nombre = (e?.nombre ?? '').toString().trim();
+        const repeticiones = (e?.repeticiones ?? '').toString().trim();
+        const series = Number(e?.series);
+        const escala = (e?.escala ?? '').toString().trim().toUpperCase(); // RPE | RIR
+        const esfuerzoPercibido = e?.esfuerzoPercibido != null ? Number(e.esfuerzoPercibido) : undefined;
+        const linkVideo = (e?.linkVideo ?? '').toString().trim();
+
+        // Validaciones rápidas antes de pasar a Mongoose
+        if (!nombre) throw new Error(`Ejercicio #${idx + 1}: el nombre es requerido`);
+        if (!repeticiones) throw new Error(`Ejercicio #${idx + 1}: repeticiones es requerido`);
+        if (!Number.isInteger(series) || series < 1) {
+          throw new Error(`Ejercicio #${idx + 1}: series debe ser un entero ≥ 1`);
+        }
+        if (escala && !['RPE', 'RIR'].includes(escala)) {
+          throw new Error(`Ejercicio #${idx + 1}: escala inválida (usa RPE o RIR)`);
+        }
+        if (esfuerzoPercibido != null) {
+          if (Number.isNaN(esfuerzoPercibido) || esfuerzoPercibido < 1 || esfuerzoPercibido > 10) {
+            throw new Error(`Ejercicio #${idx + 1}: esfuerzoPercibido debe estar entre 1 y 10`);
+          }
+        }
+
+        return {
+          nombre,
+          repeticiones,
+          series,
+          escala: escala || undefined,
+          esfuerzoPercibido: esfuerzoPercibido ?? undefined,
+          linkVideo
+        };
+      });
+
+      // En bloques de ejercicios, no guardo contenidoTexto
+      contenidoTexto = undefined;
     }
 
     const nuevoBloque = new Bloque({
@@ -24,10 +91,21 @@ const crearBloque = async (req, res) => {
     });
 
     const bloqueGuardado = await nuevoBloque.save();
-    res.status(201).json(bloqueGuardado);
+    return res.status(201).json(bloqueGuardado);
+
   } catch (error) {
+    // Si es un ValidationError de Mongoose => 400 con detalle
+    if (error.name === 'ValidationError') {
+      const detalles = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ mensaje: 'Validación fallida', errores: detalles });
+    }
+    // Errores lanzados por nuestras validaciones manuales
+    if (error.message?.startsWith('Ejercicio #')) {
+      return res.status(400).json({ mensaje: error.message });
+    }
+
     console.error('Error al crear bloque:', error);
-    res.status(500).json({ mensaje: 'Error al crear bloque' });
+    return res.status(500).json({ mensaje: 'Error al crear bloque' });
   }
 };
 
@@ -262,8 +340,82 @@ const obtenerBloques = async (req, res) => {
     });
   }
 }
+
+// Eliminar un bloque
+const eliminarBloque = async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ mensaje: 'ID de bloque inválido' });
+  }
+
+  try {
+    const bloque = await Bloque.findByIdAndDelete(id);
+    if (!bloque) {
+      return res.status(404).json({ mensaje: 'Bloque no encontrado' });
+    }
+
+    // Limpio referencias en planificaciones
+    await Planificacion.updateMany(
+      {},
+      { $pull: { "semanas.$[].dias.$[].bloques": id } }
+    );
+
+    res.json({ mensaje: 'Bloque eliminado correctamente' });
+  } catch (error) {
+    console.error('Error al eliminar bloque:', error);
+    res.status(500).json({ mensaje: 'Error al eliminar bloque' });
+  }
+};
+
+// Actualizar bloque
+const actualizarBloque = async (req, res) => {
+  const { id } = req.params;
+  const { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ mensaje: 'ID de bloque inválido' });
+  }
+
+  // Validaciones básicas
+  if (!titulo || typeof titulo !== 'string' || titulo.trim() === '') {
+    return res.status(400).json({ mensaje: 'El título es obligatorio y debe ser una cadena no vacía' });
+  }
+  if (tipo && !['texto', 'ejercicios'].includes(tipo)) {
+    return res.status(400).json({ mensaje: 'Tipo de bloque inválido' });
+  }
+  if (tipo === 'texto' && (!contenidoTexto || typeof contenidoTexto !== 'string' || contenidoTexto.trim() === '')) {
+    return res.status(400).json({ mensaje: 'El contenido es obligatorio para bloques de texto' });
+  }
+  if (tipo === 'ejercicios' && (!Array.isArray(ejercicios) || ejercicios.length === 0)) {
+    return res.status(400).json({ mensaje: 'Debe incluir al menos un ejercicio para bloques de ejercicios' });
+  }
+
+  try {
+    const bloque = await Bloque.findById(id);
+    if (!bloque) {
+      return res.status(404).json({ mensaje: 'Bloque no encontrado' });
+    }
+
+    // Actualizar campos
+    bloque.titulo = titulo || bloque.titulo;
+    bloque.tipo = tipo || bloque.tipo;
+    bloque.contenidoTexto = contenidoTexto || bloque.contenidoTexto;
+    bloque.ejercicios = ejercicios || bloque.ejercicios;
+    bloque.etiquetas = etiquetas || bloque.etiquetas;
+
+    const bloqueActualizado = await bloque.save();
+    res.json({ mensaje: 'Bloque actualizado correctamente', bloque: bloqueActualizado });
+  } catch (error) {
+    console.error('Error al actualizar bloque:', error);
+    res.status(500).json({ mensaje: 'Error al actualizar bloque' });
+  }
+};
+
 module.exports = {
   crearBloque,
   agregarBloqueADia,
-  obtenerBloques
+  obtenerBloques,
+  eliminarBloque,
+  actualizarBloque
 };
