@@ -24,4 +24,4 @@ Thumbs.db
 dist/
 
 # Coverage (si hago tests)
-coverage/
+coverage/.env
