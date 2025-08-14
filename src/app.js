@@ -28,5 +28,7 @@ app.use('/api/bloques', require('./routes/bloquesRoutes'));
 app.use('/api/comentarios', require('./routes/comentariosRoutes'));
 app.use('/api/pagos', require('./routes/pagosRoutes'));
 app.use('/api/reservas', require('./routes/reservasRoutes'));
+app.use('/api/auth', require('./routes/authRoutes'));
+
 
 module.exports = app;

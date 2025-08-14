@@ -1,52 +1,54 @@
 const mongoose = require('mongoose');
 
 const usuarioSchema = new mongoose.Schema({
-  nombre: { 
-    type: String, 
+  nombre: {
+    type: String,
     required: [true, 'El nombre es requerido'],
     trim: true,
     maxlength: [50, 'El nombre no puede exceder 50 caracteres']
   },
-  email: { 
-    type: String, 
+  email: {
+    type: String,
     required: [true, 'El email es requerido'],
     unique: true,
     lowercase: true,
     match: [/^\S+@\S+\.\S+$/, 'Por favor ingresa un email válido']
   },
-  password: { 
-    type: String, 
+  password: {
+    type: String,
     required: [true, 'La contraseña es requerida'],
     minlength: [8, 'La contraseña debe tener al menos 8 caracteres']
   },
-  rol: { 
-    type: String, 
+  rol: {
+    type: String,
     enum: {
       values: ['cliente', 'coach', 'admin'],
       message: 'Rol inválido'
     },
     default: 'cliente'
   },
-  planPersonalizado: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  planPersonalizado: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Planificacion',
-    default: null 
+    default: null
   },
   fechaVencimiento: {
     type: Date,
     default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 días gratis por defecto
   },
-  fechaRegistro: { 
-    type: Date, 
+  fechaRegistro: {
+    type: Date,
     default: Date.now,
     immutable: true
   },
-  aceptaTerminos: { 
-    type: Boolean, 
+  aceptaTerminos: {
+    type: Boolean,
     required: [true, 'Debe aceptar los términos y condiciones'],
     immutable: true
   },
-}, { 
+  resetTokenHash: { type: String, default: null },
+  resetTokenExp: { type: Date, default: null },
+}, {
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
