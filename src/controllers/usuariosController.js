@@ -17,7 +17,7 @@ const registrarUsuario = async (req, res) => {
       return res.status(400).json({ mensaje: 'El usuario ya está registrado' });
     }
 
-    if(!aceptaTerminos) {
+    if (!aceptaTerminos) {
       return res.status(400).json({ mensaje: 'Debe aceptar los términos y condiciones' });
     }
 
@@ -53,10 +53,10 @@ const loginUsuario = async (req, res) => {
     }
 
     const usuario = await Usuario.findOne({ email })
-    .populate({
-      path: 'planPersonalizado',
-      select: '_id titulo tipo' // Solo estos campos básicos
-    });
+      .populate({
+        path: 'planPersonalizado',
+        select: '_id titulo tipo'
+      });
 
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
@@ -67,27 +67,23 @@ const loginUsuario = async (req, res) => {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
 
-    // Creo payload para el token
+    // Creo payload para el token - DEBE SER IGUAL AL LOGIN CON GOOGLE
     const payload = {
       id: usuario._id,
       email: usuario.email,
       rol: usuario.rol,
       nombre: usuario.nombre,
-      planPersonalizado: usuario.planPersonalizado
+      planPersonalizado: usuario.planPersonalizado || null
     };
 
     // Duración extendida del token
     const tokenDuration = rememberMe ? '30d' : '8h';
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: tokenDuration });
-
-    // Excluyo password del retorno
-    const { password: _, ...usuarioSinPassword } = usuario.toObject();
-
+    
     res.json({
       mensaje: 'Login exitoso',
-      token: token.toString(),
-      usuario: usuarioSinPassword,
-      // Enviamos la duración para el frontend
+      token,
+      usuario: payload, // Usamos el mismo payload para mantener consistencia
       tokenDuration: rememberMe ? 'long' : 'short'
     });
 

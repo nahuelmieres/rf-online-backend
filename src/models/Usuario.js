@@ -48,6 +48,8 @@ const usuarioSchema = new mongoose.Schema({
   },
   resetTokenHash: { type: String, default: null },
   resetTokenExp: { type: Date, default: null },
+  googleId: { type: String, index: true, sparse: true },
+  avatarUrl: String,
 }, {
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
