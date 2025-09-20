@@ -58,19 +58,12 @@ app.use('/api/pagos', require('./routes/pagosRoutes'));
 app.use('/api/reservas', require('./routes/reservasRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/foros', require('./routes/forosRoutes'));
-
-try {
-  app.use('/api/chat', require('./routes/chatsRoutes'));
-  console.log('✅ chatsRoutes cargado');
-} catch (error) {
-  console.error('❌ ERROR en chatsRoutes:', error.message);
-}
-
+app.use('/api/chat', require('./routes/chatsRoutes'));
 
 // Manejo de errores global
 app.use((error, req, res, next) => {
   console.error('Error global:', error);
-  res.status(500).json({ 
+  res.status(500).json({
     mensaje: 'Error interno del servidor',
     error: process.env.NODE_ENV === 'development' ? error.message : 'Error interno'
   });

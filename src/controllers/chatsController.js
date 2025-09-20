@@ -1,10 +1,11 @@
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const MensajeChat = require('../models/MensajeChat');
 const Usuario = require('../models/Usuario');
 
 // Crear o obtener conversación existente
 const getOrCreateConversation = async (req, res) => {
-  const { userId1, userId2 } = req.body; // IDs de los usuarios involucrados
+  const { userId1, userId2 } = req.body;
 
   if (!userId1 || !userId2) {
     return res.status(400).json({ mensaje: 'Faltan IDs de usuarios' });
@@ -23,7 +24,6 @@ const getOrCreateConversation = async (req, res) => {
 
     // Si no existe, crear nueva
     if (!conversation) {
-      // Obtener información de los usuarios
       const [user1, user2] = await Promise.all([
         Usuario.findById(userId1),
         Usuario.findById(userId2)
@@ -44,10 +44,10 @@ const getOrCreateConversation = async (req, res) => {
       await conversation.populate('participants.userId', 'nombre email rol');
     }
 
-    return conversation;
+    res.json(conversation);
   } catch (error) {
     console.error('Error en getOrCreateConversation:', error);
-    return res.status(500).json({ mensaje: 'Error del servidor' });
+    res.status(500).json({ mensaje: 'Error del servidor' });
   }
 }
 
@@ -84,7 +84,7 @@ const sendMessage = async (req, res) => {
     // Populate para obtener información del sender
     await message.populate('senderId', 'nombre email rol');
 
-    return message;
+    return res.json(message);
   } catch (error) {
     console.error('Error en sendMessage:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
@@ -92,14 +92,18 @@ const sendMessage = async (req, res) => {
 }
 
 // Obtener historial de mensajes
+// controllers/chatsController.js
 const getMessageHistory = async (req, res) => {
-  const { conversationId, page = 1, limit = 50 } = req.query;
+  const { conversationId } = req.params;       // <-- params
+  const page  = parseInt(req.query.page ?? 1);  // <-- query
+  const limit = parseInt(req.query.limit ?? 50);
+
   if (!conversationId) {
     return res.status(400).json({ mensaje: 'Falta ID de conversación' });
   }
+
   try {
     const skip = (page - 1) * limit;
-
     const messages = await MensajeChat.find({ conversationId })
       .populate('senderId', 'nombre email rol')
       .sort({ createdAt: -1 })
@@ -107,58 +111,61 @@ const getMessageHistory = async (req, res) => {
       .limit(limit)
       .lean();
 
-    return messages.reverse(); // Ordenar de más antiguo a más nuevo
+    return res.json(messages.reverse());
   } catch (error) {
     console.error('Error en getMessageHistory:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
   }
-}
+};
 
 // Marcar mensajes como leídos
 const markAsRead = async (req, res) => {
-  const { conversationId, userId } = req.body;
+  const conversationId = req.params.conversationId || req.body?.conversationId;
+  // si tu middleware mete req.user.id podés preferirlo; si no, usa el body:
+  const userId = (req.user && req.user.id) || req.body?.userId;
+
   if (!conversationId || !userId) {
     return res.status(400).json({ mensaje: 'Faltan campos requeridos' });
   }
+
+  if (!mongoose.Types.ObjectId.isValid(conversationId) || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ mensaje: 'IDs inválidos' });
+  }
+
   try {
-    // Marcar mensajes como leídos
-    await MensajeChat.updateMany(
+    const convId = new mongoose.Types.ObjectId(conversationId);
+    const readerId = new mongoose.Types.ObjectId(userId);
+
+    // 1) Marcar como leídos los mensajes del OTRO usuario
+    const msgResult = await MensajeChat.updateMany(
       {
-        conversationId,
-        senderId: { $ne: userId }, // No marcar los propios
-        read: false
+        conversationId: convId,
+        senderId: { $ne: readerId },
+        read: false,
       },
       {
         $set: { read: true },
-        $push: {
-          readBy: {
-            userId: userId,
-            readAt: new Date()
-          }
-        }
+        $push: { readBy: { userId: readerId, readAt: new Date() } },
       }
     );
 
-    // Resetear contador de no leídos
-    await Conversation.findByIdAndUpdate(
-      conversationId,
-      {
-        $set: { unreadCount: 0 },
-        $set: {
-          'participants.$[elem].lastRead': new Date()
-        }
-      },
-      {
-        arrayFilters: [{ 'elem.userId': userId }]
-      }
+    // 2) Poner unreadCount=0 y actualizar lastRead del lector (sin arrayFilters)
+    const convResult = await Conversation.updateOne(
+      { _id: convId, 'participants.userId': readerId },
+      { $set: { unreadCount: 0, 'participants.$.lastRead': new Date() } }
     );
 
-    return { mensaje: 'Mensajes marcados como leídos' };
+    return res.json({
+      ok: true,
+      mensaje: 'Mensajes marcados como leídos',
+      modifiedMessages: msgResult.modifiedCount ?? msgResult.nModified,
+      convModified: convResult.modifiedCount ?? convResult.nModified,
+    });
   } catch (error) {
     console.error('Error en markAsRead:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
   }
-}
+};
 
 // Obtener conversaciones de un usuario
 const getUserConversations = async (req, res) => {
@@ -175,7 +182,7 @@ const getUserConversations = async (req, res) => {
       .populate('lastMessage.senderId', 'nombre')
       .sort({ updatedAt: -1 });
 
-    return conversations;
+    return res.json(conversations);
   } catch (error) {
     console.error('Error en getUserConversations:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
@@ -190,7 +197,7 @@ const deleteConversation = async (req, res) => {
   }
   try {
     await Conversation.findByIdAndUpdate(conversationId, { isActive: false });
-    return { mensaje: 'Conversación eliminada' };
+    return res.json({ mensaje: 'Conversación eliminada' });
   } catch (error) {
     console.error('Error en deleteConversation:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
