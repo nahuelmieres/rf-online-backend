@@ -58,44 +58,61 @@ const sendMessage = async (req, res) => {
   if (!conversationId || !senderId || !text) {
     return res.status(400).json({ mensaje: 'Faltan campos requeridos' });
   }
-  try {
-    // Crear el mensaje
-    const message = new MensajeChat({
-      conversationId,
-      senderId,
-      text
-    });
 
+  try {
+    // Crear mensaje
+    const message = new MensajeChat({ conversationId, senderId, text });
     await message.save();
 
-    // Actualizar última conversación
+    // Actualizar lastMessage / unreadCount
     await Conversation.findByIdAndUpdate(
       conversationId,
       {
         lastMessage: {
           text: text.length > 50 ? text.substring(0, 50) + '...' : text,
-          senderId: senderId,
+          senderId,
           timestamp: new Date()
         },
         $inc: { unreadCount: 1 }
       }
     );
 
-    // Populate para obtener información del sender
+    // Populate liviano (opcional)
     await message.populate('senderId', 'nombre email rol');
 
-    return res.json(message);
+    // --- Normalizar payload para el front (IDs en string) ---
+    const payload = {
+      _id: String(message._id),
+      conversationId: String(message.conversationId),
+      senderId: String(message.senderId?._id || message.senderId),
+      text: message.text,
+      createdAt: message.createdAt,
+      read: !!message.read,
+      readBy: (message.readBy || []).map(r => ({ ...r, userId: String(r.userId) })),
+    };
+
+    // --- EMITIR a la room namespaced y también a la "plana" para compatibilidad ---
+    req.io.to(`conversation:${conversationId}`).to(String(conversationId)).emit('new-message', payload);
+
+    // (Opcional) Notificar a salas personales de destinatarios, si querés badges:
+    try {
+      const conv = await Conversation.findById(conversationId).select('participants');
+      (conv?.participants || [])
+        .map(p => String(p.userId))
+        .filter(uid => uid !== String(senderId))
+        .forEach(uid => req.io.to(`user:${uid}`).emit('new-message', payload));
+    } catch { /* no bloquear el envío por errores de notificación */ }
+    return res.json(payload);
   } catch (error) {
     console.error('Error en sendMessage:', error);
     return res.status(500).json({ mensaje: 'Error del servidor' });
   }
-}
+};
 
 // Obtener historial de mensajes
-// controllers/chatsController.js
 const getMessageHistory = async (req, res) => {
   const { conversationId } = req.params;       // <-- params
-  const page  = parseInt(req.query.page ?? 1);  // <-- query
+  const page = parseInt(req.query.page ?? 1);  // <-- query
   const limit = parseInt(req.query.limit ?? 50);
 
   if (!conversationId) {
