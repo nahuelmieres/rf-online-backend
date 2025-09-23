@@ -59,12 +59,14 @@ const loginWithGoogle = async (req, res) => {
         avatarUrl: picture || null,
         rol: 'cliente',
         aceptaTerminos: true,
+        authProvider: 'google',  // 👈
       });
       await user.save();
     } else {
       if (!user.googleId) user.googleId = googleId;
       if (!user.avatarUrl && picture) user.avatarUrl = picture;
       if (!user.nombre && name) user.nombre = name;
+      if (user.authProvider !== 'google') user.authProvider = 'google'; // 👈
       await user.save();
     }
 
@@ -86,8 +88,12 @@ const loginWithGoogle = async (req, res) => {
     });
   } catch (err) {
     console.error('Error en loginWithGoogle:', err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ mensaje: err.message });
+    }
     return res.status(401).json({ mensaje: err.message || 'Error en autenticación con Google' });
   }
+
 };
 
 module.exports = { loginWithGoogle };

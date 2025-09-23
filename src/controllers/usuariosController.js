@@ -47,19 +47,24 @@ const loginUsuario = async (req, res) => {
   try {
     const { email, password, rememberMe } = req.body;
 
-    // Valido campos
     if (!email || !password) {
       return res.status(400).json({ mensaje: 'Email y contraseña obligatorios' });
     }
 
-    const usuario = await Usuario.findOne({ email })
-      .populate({
-        path: 'planPersonalizado',
-        select: '_id titulo tipo'
-      });
+    // Traigo el hash (password tiene select:false en el modelo)
+    const usuario = await Usuario.findOne({ email: email.toLowerCase() })
+      .select('+password +googleId') // <- importante
+      .populate({ path: 'planPersonalizado', select: '_id titulo tipo' });
 
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+
+    // Si la cuenta es solo Google (sin password), avisar
+    if (!usuario.password) {
+      return res.status(400).json({
+        mensaje: 'Tu cuenta está vinculada a Google. Iniciá sesión con Google o restablecé la contraseña para crear una clave local.'
+      });
     }
 
     const coincide = await bcrypt.compare(password, usuario.password);
@@ -67,7 +72,6 @@ const loginUsuario = async (req, res) => {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
 
-    // Creo payload para el token - DEBE SER IGUAL AL LOGIN CON GOOGLE
     const payload = {
       id: usuario._id,
       email: usuario.email,
@@ -76,17 +80,15 @@ const loginUsuario = async (req, res) => {
       planPersonalizado: usuario.planPersonalizado || null
     };
 
-    // Duración extendida del token
     const tokenDuration = rememberMe ? '30d' : '8h';
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: tokenDuration });
-    
+
     res.json({
       mensaje: 'Login exitoso',
       token,
-      usuario: payload, // Usamos el mismo payload para mantener consistencia
+      usuario: payload,
       tokenDuration: rememberMe ? 'long' : 'short'
     });
-
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ mensaje: 'Error del servidor' });
