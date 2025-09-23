@@ -1,4 +1,3 @@
-// controllers/auth.controller.js
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 const Usuario = require('../models/Usuario');
@@ -13,14 +12,12 @@ const ALLOWED_AUDIENCES = (process.env.GOOGLE_CLIENT_IDS || process.env.GOOGLE_C
   .filter(Boolean);
 
 async function verifyIdToken(idToken) {
-  console.log('[GoogleLogin] verifyIdToken: audiences permitidas =', ALLOWED_AUDIENCES);
   const ticket = await client.verifyIdToken({
     idToken,
     // Si definiste audiencias, Google las valida por vos
     audience: ALLOWED_AUDIENCES.length ? ALLOWED_AUDIENCES : undefined,
   });
   const payload = ticket.getPayload();
-  console.log('[GoogleLogin] payload.aud =', payload.aud, ' | iss =', payload.iss);
   return payload;
 }
 
