@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
+const validator = require('validator');
 
 const usuarioSchema = new mongoose.Schema({
   nombre: {
@@ -13,7 +14,16 @@ const usuarioSchema = new mongoose.Schema({
     required: [true, 'El email es requerido'],
     unique: true,
     lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Por favor ingresa un email válido']
+    validate: {
+      validator: function (v) {
+        return validator.isEmail(v);
+      },
+      message: 'Por favor ingresa un email válido'
+    },
+    maxlength: [100, 'El email no puede exceder 100 caracteres'],
+    trim: true,
+    index: true,
+    sparse: true
   },
   password: {
     type: String,
@@ -32,9 +42,15 @@ const usuarioSchema = new mongoose.Schema({
     ref: 'Planificacion',
     default: null
   },
-  fechaVencimiento: {
-    type: Date,
-    default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+  subscription: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription',
+    default: null
+  },
+  planRequest: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PlanRequest',
+    default: null
   },
   fechaRegistro: {
     type: Date,
@@ -63,7 +79,12 @@ const usuarioSchema = new mongoose.Schema({
 // Virtual
 usuarioSchema.virtual('estadoPago').get(function () {
   if (this.rol === 'admin' || this.rol === 'coach') return true;
-  return this.fechaVencimiento && this.fechaVencimiento > new Date();
+
+  if (this.subscription && this.subscription.estado === 'active') {
+    return this.subscription.currentPeriodEnd > new Date();
+  }
+
+  return false;
 });
 
 // Índices
@@ -71,7 +92,7 @@ usuarioSchema.index({ email: 1 }, { unique: true });
 usuarioSchema.index({ planPersonalizado: 1 });
 
 // Middleware para hashear password antes de guardar
-usuarioSchema.pre('save', async function(next) {
+usuarioSchema.pre('save', async function (next) {
   // si no hay password o no cambió, seguimos
   if (!this.isModified('password') || !this.password) return next();
   try {

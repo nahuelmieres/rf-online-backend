@@ -6,6 +6,11 @@ const pagoSchema = new mongoose.Schema({
     ref: 'Usuario',
     required: true
   },
+  tipo: {
+    type: String,
+    enum: ['suscripcion', 'compra_unica'],
+    required: true
+  },
   externalId: { // preferenceId de MP o orderId de PayPal
     type: String,
     required: true
@@ -23,7 +28,7 @@ const pagoSchema = new mongoose.Schema({
   moneda: {
     type: String,
     enum: ['UYU', 'USD'],
-    default: 'UYU'
+    default: 'USD'
   },
   metodo: {
     type: String,

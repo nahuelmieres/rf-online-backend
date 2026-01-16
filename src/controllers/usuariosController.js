@@ -1,5 +1,6 @@
 const Usuario = require('../models/Usuario');
 const Planificacion = require('../models/Planificacion');
+const PlanRequest = require('../models/PlanRequest');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
@@ -255,11 +256,36 @@ const cambiarRolUsuario = async (req, res) => {
   }
 };
 
+// Obtener plan requests de usuarios (coach y admin)
+const obtenerPlanRequestsUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ mensaje: 'ID de usuario es obligatorio' });
+    }
+
+    const usuario = await Usuario.findById(id).lean();
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+    const planRequest = await PlanRequest.findById(usuario.planRequest).lean();
+    if (!planRequest) {
+      return res.status(404).json({ mensaje: 'Plan request no encontrado para este usuario' });
+    }
+
+    res.json({ mensaje: 'Plan requests obtenidos correctamente', planRequest: planRequest });
+  } catch (error) {
+    console.error('Error al obtener plan requests:', error);
+    return res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+}
+
 module.exports = {
   registrarUsuario,
   loginUsuario,
   asignarPlanificacion,
   obtenerPerfil,
   obtenerUsuarios,
-  cambiarRolUsuario
+  cambiarRolUsuario,
+  obtenerPlanRequestsUsuario
 };

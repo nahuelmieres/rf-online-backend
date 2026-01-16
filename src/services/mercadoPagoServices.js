@@ -20,14 +20,14 @@ const crearPreferencia = async (usuario, monto) => {
       ],
       back_urls: {
         success: "https://rf-online.com/pago-exitoso",
-        failure: "https://rf-online.com/pago-fallido",
+        failure: "https://rf-online.com/pago-fallido", 
         pending: "https://rf-online.com/pago-pendiente"
       },
       auto_return: "approved",
       metadata: {
         usuarioId: usuario.id
       },
-      external_reference: usuario.id.toString() // Para asegurarme que sea un string
+      external_reference: usuario.id.toString()
     };
 
     const client = new Preference(mp);

@@ -2,15 +2,23 @@ const express = require('express');
 const router = express.Router();
 const verificarToken = require('../middlewares/authMiddleware');
 const { generarLinkPagoMP, recibirNotificacionMP } = require('../controllers/mercadoPagoController');
-const { generarOrdenPaypal, capturarPagoPaypal, webhookPaypal } = require('../controllers/payPalController');
+const { 
+  crearSuscripcionBasico,
+  crearSuscripcionPersonalizado,
+  webhookPaypal 
+} = require('../controllers/payPalController');
 
-// MercadoPago
+// MercadoPago (mantener para futura implementación)
 router.post('/mercadopago/preferencia', verificarToken, generarLinkPagoMP);
 router.post('/mercadopago/webhook', recibirNotificacionMP);
 
-// PayPal
-router.post('/paypal/orden', verificarToken, generarOrdenPaypal);
-router.post('/paypal/captura', verificarToken, capturarPagoPaypal);
+// PayPal - Nuevos endpoints para suscripciones
+router.post('/paypal/suscripcion/basico', verificarToken, crearSuscripcionBasico);
+router.post('/paypal/suscripcion/personalizado', verificarToken, crearSuscripcionPersonalizado);
 router.post('/paypal/webhook', webhookPaypal);
+
+// Eliminamos los endpoints viejos de órdenes simples
+// router.post('/paypal/orden', verificarToken, generarOrdenPaypal);
+// router.post('/paypal/captura', verificarToken, capturarPagoPaypal);
 
 module.exports = router;
