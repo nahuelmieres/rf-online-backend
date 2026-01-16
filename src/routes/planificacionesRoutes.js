@@ -26,7 +26,7 @@ agregarBloqueADia);
 router.get('/:id', verificarToken, obtenerPlanificacionPorId);
 
 router.delete('/:idPlanificacion/semanas/:numeroSemana/bloques/:idBloque', 
-  verificarToken, verificarRol('coach', 'admin'), eliminarBloqueDeSemana);
+verificarToken, verificarRol('coach', 'admin'), eliminarBloqueDeSemana);
 
 router.delete('/:id', verificarToken, verificarRol('admin'), eliminarPlanificacion);
 

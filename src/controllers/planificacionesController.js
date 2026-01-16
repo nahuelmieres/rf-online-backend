@@ -250,19 +250,70 @@ const eliminarBloqueDeSemana = async (req, res) => {
     const { idPlanificacion, numeroSemana, idBloque } = req.params;
 
     try {
+        // Validar IDs
+        if (!mongoose.Types.ObjectId.isValid(idPlanificacion)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'ID de planificación inválido' 
+            });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(idBloque)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'ID de bloque inválido' 
+            });
+        }
+
         const plan = await Planificacion.findById(idPlanificacion);
-        if (!plan) return res.status(404).json({ mensaje: 'Planificación no encontrada' });
+        
+        if (!plan) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Planificación no encontrada' 
+            });
+        }
 
         const semana = plan.semanas.find(s => s.numero === parseInt(numeroSemana));
-        if (!semana) return res.status(404).json({ mensaje: 'Semana no encontrada' });
+        
+        if (!semana) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Semana no encontrada' 
+            });
+        }
 
-        semana.bloques = semana.bloques.filter(b => b.toString() !== idBloque);
+        // Eliminar el bloque de todos los días de la semana
+        let bloqueEliminado = false;
+        semana.dias.forEach(dia => {
+            const index = dia.bloques.findIndex(b => b.toString() === idBloque);
+            if (index !== -1) {
+                dia.bloques.splice(index, 1);
+                bloqueEliminado = true;
+            }
+        });
+
+        if (!bloqueEliminado) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Bloque no encontrado en esta semana' 
+            });
+        }
+
         await plan.save();
 
-        res.status(200).json({ mensaje: 'Bloque eliminado de la semana' });
+        res.status(200).json({ 
+            success: true,
+            message: 'Bloque eliminado de la semana exitosamente',
+            data: plan
+        });
     } catch (error) {
         console.error('Error al eliminar bloque:', error);
-        res.status(500).json({ mensaje: 'Error del servidor' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error del servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 
