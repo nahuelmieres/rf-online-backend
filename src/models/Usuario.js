@@ -71,19 +71,33 @@ const usuarioSchema = new mongoose.Schema({
 
   // Para auditar proveedor
   authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+  
+  // Para manejo de sesiones (sesión única por usuario)
+  sessionToken: {
+    type: String,
+    default: null,
+    select: false
+  },
+  lastSessionDate: {
+    type: Date,
+    default: null
+  },
 }, {
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// Virtual
+// Virtual - ACTUALIZADO para verificar suscripción correctamente
 usuarioSchema.virtual('estadoPago').get(function () {
+  // Admin y coach siempre tienen acceso
   if (this.rol === 'admin' || this.rol === 'coach') return true;
 
-  if (this.subscription && this.subscription.estado === 'active') {
-    return this.subscription.currentPeriodEnd > new Date();
+  // Si subscription está poblado (viene con populate)
+  if (this.subscription && typeof this.subscription === 'object' && this.subscription.estado) {
+    return this.subscription.estado === 'active' && this.subscription.currentPeriodEnd > new Date();
   }
 
+  // Si subscription no está poblado, no podemos saber (retornamos false por seguridad)
   return false;
 });
 

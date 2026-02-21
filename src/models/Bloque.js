@@ -13,7 +13,7 @@ function esfuerzoValidator(v) {
 
   // Ajustar rangos si se prefiere otra convención
   if (escala === 'RIR') return v >= 0 && v <= 5;
-  if (escala === 'RPE') return v >= 1 && v <= 10; // ej.: si se quiere cambiar a 6–10, cambiar acá
+  if (escala === 'RPE') return v >= 1 && v <= 10;
   return true;
 }
 
@@ -123,6 +123,29 @@ const bloqueSchema = new mongoose.Schema({
     trim: true,
     set: trimOrNull
   },
+  // NUEVO: Array de videos para bloques de texto
+  videos: {
+    type: [{
+      titulo: { type: String, trim: true },
+      url: { 
+        type: String, 
+        trim: true,
+        validate: {
+          validator: (v) => {
+            if (!v) return false;
+            try {
+              const u = new URL(v);
+              return /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname);
+            } catch {
+              return false;
+            }
+          },
+          message: 'Ingresa un link de YouTube válido'
+        }
+      }
+    }],
+    default: []
+  },
   ejercicios: { type: [ejercicioSchema], default: [] },
   etiquetas: {
     type: [String],
@@ -144,7 +167,7 @@ const bloqueSchema = new mongoose.Schema({
   }
 }, {
   strict: 'throw',
-  timestamps: true, // createdAt / updatedAt
+  timestamps: true,
   toJSON: {
     virtuals: true,
     transform: (_, ret) => { delete ret.__v; return ret; }
@@ -191,5 +214,3 @@ bloqueSchema.post('deleteOne', { document: true }, async function () {
 });
 
 module.exports = mongoose.model('Bloque', bloqueSchema);
-// Si te sirve exponer el schema de ejercicio para tests u otros modelos:
-// module.exports.EjercicioSchema = ejercicioSchema;

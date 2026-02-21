@@ -4,7 +4,7 @@ const Planificacion = require('../models/Planificacion');
 
 const crearBloque = async (req, res) => {
   try {
-    let { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
+    let { titulo, tipo, contenidoTexto, ejercicios, etiquetas, videos } = req.body;
 
     // Sanitizados básicos
     titulo = (titulo ?? '').trim();
@@ -29,12 +29,25 @@ const crearBloque = async (req, res) => {
       etiquetas = [];
     }
 
-    // Si es bloque de texto, me aseguro contenido y vaciamos ejercicios
+    // Si es bloque de texto, me aseguro contenido y proceso videos
     if (tipo === 'texto') {
       contenidoTexto = (contenidoTexto ?? '').toString().trim();
       if (!contenidoTexto) {
         return res.status(400).json({ mensaje: 'El contenido es requerido para bloques de texto' });
       }
+      
+      // Procesar videos para bloques de texto
+      if (Array.isArray(videos) && videos.length > 0) {
+        videos = videos
+          .filter(v => v?.url?.trim())
+          .map(v => ({
+            titulo: (v.titulo ?? '').trim() || 'Video',
+            url: v.url.trim()
+          }));
+      } else {
+        videos = [];
+      }
+      
       ejercicios = []; // evita guardar basura accidental
     }
 
@@ -77,14 +90,16 @@ const crearBloque = async (req, res) => {
         };
       });
 
-      // En bloques de ejercicios, no guardo contenidoTexto
+      // En bloques de ejercicios, no guardo contenidoTexto ni videos
       contenidoTexto = undefined;
+      videos = [];
     }
 
     const nuevoBloque = new Bloque({
       titulo,
       tipo,
       contenidoTexto,
+      videos, // NUEVO
       ejercicios,
       etiquetas,
       creadoPor: req.usuario.id
@@ -260,21 +275,6 @@ const agregarBloqueADia = async (req, res) => {
   }
 };
 
-/*
- * @desc    Obtener todos los bloques con filtros opcionales
- * @route   GET /api/bloques
- * @access  Privado (Autenticado)
- * @query   {String} [creadoPor] - Filtrar por ID de creador
- * @query   {String} [tipo] - Filtrar por tipo ('texto' o 'ejercicios')
- * @query   {Boolean} [populateCreador=false] - Poblar datos del creador
- */
-/*
-  Ejemplos de uso:
-  GET /api/bloques -> Todos los bloques
-  GET /api/bloques?creadoPor=662a4c8d9c8f6a3d504b3a21 -> Por usuario
-  GET /api/bloques?tipo=ejercicios -> Solo bloques de ejercicios
-  GET /api/bloques?populateCreador=true -> Incluye info del creador
-*/
 const obtenerBloques = async (req, res) => {
   try {
     const { creadoPor, tipo, populateCreador } = req.query;
@@ -283,7 +283,7 @@ const obtenerBloques = async (req, res) => {
     const filtro = {};
 
     if (creadoPor) {
-      if (!ObjectId.isValid(creadoPor)) {
+      if (!mongoose.Types.ObjectId.isValid(creadoPor)) {
         return res.status(400).json({
           success: false,
           mensaje: 'ID de creador inválido'
@@ -306,7 +306,7 @@ const obtenerBloques = async (req, res) => {
     const populateOptions = populateCreador === 'true' ? {
       path: 'creadoPor',
       select: '_id nombre email rol',
-      match: { deleted: { $ne: true } } // Opcional: excluyo usuarios eliminados
+      match: { deleted: { $ne: true } }
     } : null;
 
     // 3. Ejecuto consulta
@@ -371,7 +371,7 @@ const eliminarBloque = async (req, res) => {
 // Actualizar bloque
 const actualizarBloque = async (req, res) => {
   const { id } = req.params;
-  const { titulo, tipo, contenidoTexto, ejercicios, etiquetas } = req.body;
+  const { titulo, tipo, contenidoTexto, ejercicios, etiquetas, videos } = req.body;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ mensaje: 'ID de bloque inválido' });
@@ -403,6 +403,20 @@ const actualizarBloque = async (req, res) => {
     bloque.contenidoTexto = contenidoTexto || bloque.contenidoTexto;
     bloque.ejercicios = ejercicios || bloque.ejercicios;
     bloque.etiquetas = etiquetas || bloque.etiquetas;
+    
+    // NUEVO: Actualizar videos si es bloque de texto
+    if (bloque.tipo === 'texto' && videos !== undefined) {
+      if (Array.isArray(videos)) {
+        bloque.videos = videos
+          .filter(v => v?.url?.trim())
+          .map(v => ({
+            titulo: (v.titulo ?? '').trim() || 'Video',
+            url: v.url.trim()
+          }));
+      } else {
+        bloque.videos = [];
+      }
+    }
 
     const bloqueActualizado = await bloque.save();
     res.json({ mensaje: 'Bloque actualizado correctamente', bloque: bloqueActualizado });

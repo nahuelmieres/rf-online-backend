@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const verificarToken = require('../middlewares/authMiddleware');
+const {verificarToken, verificarSuscripcionActiva} = require('../middlewares/authMiddleware');
 const verificarRol = require('../middlewares/rolMiddleware');
 const { crearPlanificacion, obtenerPlanificaciones, obtenerPlanificacionPorId,
     eliminarBloqueDeSemana, eliminarPlanificacion, editarPlanificacion,

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const verificarToken = require('../middlewares/authMiddleware');
+const {verificarToken, verificarSuscripcionActiva} = require('../middlewares/authMiddleware');
 const {
     crearComentario,
     responderComentario,
@@ -14,25 +14,25 @@ const {
 const verificarRol = require('../middlewares/rolMiddleware');
 
 // Creo comentario
-router.post('/', verificarToken, crearComentario);
+router.post('/', verificarToken, verificarSuscripcionActiva, crearComentario);
 
 // Obtengo comentarios por planificación/semana/día
-router.get('/', verificarToken, obtenerComentariosPorPlan);
+router.get('/', verificarToken, verificarSuscripcionActiva, obtenerComentariosPorPlan);
 
 // Elimino comentario
-router.delete('/:id', verificarToken, eliminarComentario);
+router.delete('/:id', verificarToken, verificarSuscripcionActiva, eliminarComentario);
 
 // Edito comentario
-router.put('/:id', verificarToken, editarComentario);
+router.put('/:id', verificarToken, verificarSuscripcionActiva, editarComentario);
 
 // Respondo comentario
 router.post('/:id/responder', verificarToken, verificarRol('admin', 'coach'), responderComentario);
 
 // Edito respuesta de comentario
-router.put('/:id/respuesta', verificarToken, editarRespuesta);
+router.put('/:id/respuesta', verificarToken, verificarSuscripcionActiva, editarRespuesta);
 
 // Elimino respuesta de comentario
-router.delete('/:id/respuesta', verificarToken, eliminarRespuesta);
+router.delete('/:id/respuesta', verificarToken, verificarSuscripcionActiva, eliminarRespuesta);
 
 // Obtengo respuestas por planificación y usuario
 router.get('/respuestas', verificarToken, verificarRol('admin', 'coach'), obtenerRespuestasPorPlan);

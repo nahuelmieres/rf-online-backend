@@ -1,24 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const { registrarUsuario, loginUsuario, asignarPlanificacion, 
-    obtenerPerfil, obtenerUsuarios, cambiarRolUsuario,
-obtenerPlanRequestsUsuario } = require('../controllers/usuariosController');
-const verificarToken = require('../middlewares/authMiddleware');
-const verificarRol = require('../middlewares/rolMiddleware');
+const { verificarToken, verificarSuscripcionActiva } = require('../middlewares/authMiddleware'); // CAMBIO AQUÍ
+const {
+  registrarUsuario,
+  loginUsuario,
+  asignarPlanificacion,
+  obtenerPerfil,
+  obtenerUsuarios,
+  cambiarRolUsuario,
+  obtenerPlanRequestsUsuario,
+  logoutUsuario
+} = require('../controllers/usuariosController');
 
-router.post('/registrar', registrarUsuario);
-
+// Rutas públicas
+router.post('/registro', registrarUsuario);
 router.post('/login', loginUsuario);
 
+// Rutas protegidas (requieren autenticación)
+router.post('/logout', verificarToken, logoutUsuario);
 router.get('/perfil', verificarToken, obtenerPerfil);
-
-router.put('/asignar-plan/:idUsuario/planificacion/:idPlan', verificarToken, verificarRol('admin', 'coach'), asignarPlanificacion);
-
 router.get('/clientes', verificarToken, obtenerUsuarios);
-
-router.put('/:id/cambiar-rol', verificarToken, verificarRol('admin'), cambiarRolUsuario);
-
-// Obtener plan requests de usuarios (coach y admin)
-router.get('/plan-requests/:id', verificarToken, verificarRol('admin', 'coach'), obtenerPlanRequestsUsuario);
+router.put('/:id/rol', verificarToken, cambiarRolUsuario);
+router.put('/asignar/:idUsuario/:idPlan', verificarToken, asignarPlanificacion);
+router.get('/:id/plan-request', verificarToken, obtenerPlanRequestsUsuario);
 
 module.exports = router;

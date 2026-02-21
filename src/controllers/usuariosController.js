@@ -3,6 +3,7 @@ const Planificacion = require('../models/Planificacion');
 const PlanRequest = require('../models/PlanRequest');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 const registrarUsuario = async (req, res) => {
   try {
@@ -52,10 +53,9 @@ const loginUsuario = async (req, res) => {
       return res.status(400).json({ mensaje: 'Email y contraseña obligatorios' });
     }
 
-    // Traigo el hash (password tiene select:false en el modelo)
+    // Traigo el usuario SIN .populate() primero para poder modificarlo
     const usuario = await Usuario.findOne({ email: email.toLowerCase() })
-      .select('+password +googleId') // <- importante
-      .populate({ path: 'planPersonalizado', select: '_id titulo tipo' });
+      .select('+password +googleId +sessionToken');
 
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
@@ -73,12 +73,24 @@ const loginUsuario = async (req, res) => {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
 
+    // NUEVO: Generar token de sesión único
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+
+    // NUEVO: Actualizar sessionToken en BD (invalida sesiones anteriores)
+    usuario.sessionToken = sessionToken;
+    usuario.lastSessionDate = new Date();
+    await usuario.save();
+
+    // DESPUÉS de guardar, popular planPersonalizado para el payload
+    await usuario.populate({ path: 'planPersonalizado', select: '_id titulo tipo' });
+
     const payload = {
       id: usuario._id,
       email: usuario.email,
       rol: usuario.rol,
       nombre: usuario.nombre,
-      planPersonalizado: usuario.planPersonalizado || null
+      planPersonalizado: usuario.planPersonalizado || null,
+      sessionToken // NUEVO: Incluir en JWT
     };
 
     const tokenDuration = rememberMe ? '30d' : '8h';
@@ -128,13 +140,14 @@ const asignarPlanificacion = async (req, res) => {
 
 const obtenerPerfil = async (req, res) => {
   try {
-    // Obtengo solo datos básicos del usuario + referencia a planificación
+    // ACTUALIZADO: Agregar populate de subscription
     const usuario = await Usuario.findById(req.usuario.id)
       .select('-password -__v')
       .populate({
         path: 'planPersonalizado',
-        select: '_id titulo tipo' // Solo estos campos básicos
+        select: '_id titulo tipo'
       })
+      .populate('subscription') // NUEVO: Popular subscription para que funcione el virtual
       .lean({ virtuals: true }); // Incluyo campos virtuales como estadoPago
 
     if (!usuario) {
@@ -152,12 +165,16 @@ const obtenerPerfil = async (req, res) => {
         email: usuario.email,
         rol: usuario.rol,
         estadoPago: usuario.estadoPago,
-        fechaVencimiento: usuario.fechaVencimiento ? usuario.fechaVencimiento.toISOString() : null,
       },
       planificacion: usuario.planPersonalizado ? {
         id: usuario.planPersonalizado._id,
         titulo: usuario.planPersonalizado.titulo,
         tipo: usuario.planPersonalizado.tipo
+      } : null,
+      subscription: usuario.subscription ? { // NUEVO: Info de suscripción
+        plan: usuario.subscription.plan,
+        estado: usuario.subscription.estado,
+        currentPeriodEnd: usuario.subscription.currentPeriodEnd
       } : null
     };
 
@@ -280,9 +297,27 @@ const obtenerPlanRequestsUsuario = async (req, res) => {
   }
 }
 
+const logoutUsuario = async (req, res) => {
+  try {
+    const { id } = req.usuario;
+
+    // Invalida el sessionToken en BD
+    await Usuario.findByIdAndUpdate(id, {
+      sessionToken: null,
+      lastSessionDate: new Date()
+    });
+
+    res.json({ mensaje: 'Sesión cerrada exitosamente' });
+  } catch (error) {
+    console.error('Error en logout:', error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
 module.exports = {
   registrarUsuario,
   loginUsuario,
+  logoutUsuario,
   asignarPlanificacion,
   obtenerPerfil,
   obtenerUsuarios,

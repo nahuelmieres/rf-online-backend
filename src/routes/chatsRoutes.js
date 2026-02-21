@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const verificarToken = require('../middlewares/authMiddleware');
+const {verificarToken, verificarSuscripcionActiva} = require('../middlewares/authMiddleware');
 const {
   getOrCreateConversation,
   sendMessage,
@@ -11,21 +11,21 @@ const {
 } = require('../controllers/chatsController');
 
 // Obtener o crear conversación
-router.post('/conversations', verificarToken, getOrCreateConversation);
+router.post('/conversations', verificarToken, verificarSuscripcionActiva, getOrCreateConversation);
 
 // Enviar mensaje
-router.post('/messages', verificarToken, sendMessage);
+router.post('/messages', verificarToken, verificarSuscripcionActiva, sendMessage);
 
 // Obtener historial de mensajes
-router.get('/conversations/:conversationId/messages', verificarToken, getMessageHistory);
+router.get('/conversations/:conversationId/messages', verificarToken, verificarSuscripcionActiva, getMessageHistory);
 
 // Obtener conversaciones del usuario
-router.get('/conversations/user/:userId', verificarToken, getUserConversations);
+router.get('/conversations/user/:userId', verificarToken, verificarSuscripcionActiva, getUserConversations);
 
 // Marcar conversación como leída
-router.post('/conversations/:conversationId/read', verificarToken, markAsRead);
+router.post('/conversations/:conversationId/read', verificarToken, verificarSuscripcionActiva, markAsRead);
 
 // Eliminar conversación
-router.delete('/conversations/:conversationId', verificarToken, deleteConversation);
+router.delete('/conversations/:conversationId', verificarToken, verificarSuscripcionActiva, deleteConversation);
 
 module.exports = router;
