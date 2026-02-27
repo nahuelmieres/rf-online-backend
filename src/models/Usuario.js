@@ -27,14 +27,13 @@ const usuarioSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    // Solo requerida si NO hay googleId (cuenta local)
     required: [function () { return !this.googleId; }, 'La contraseña es requerida para cuentas locales'],
     minlength: [8, 'La contraseña debe tener al menos 8 caracteres'],
     select: false
   },
   rol: {
     type: String,
-    enum: { values: ['cliente', 'coach', 'admin'], message: 'Rol inválido' },
+    enum: { values: ['cliente', 'coach', 'admin', 'reservas'], message: 'Rol inválido' }, // NUEVO: rol 'reservas'
     default: 'cliente'
   },
   planPersonalizado: {
@@ -65,14 +64,10 @@ const usuarioSchema = new mongoose.Schema({
   resetTokenHash: { type: String, default: null },
   resetTokenExp: { type: Date, default: null },
 
-  // Si existe, es cuenta Google
   googleId: { type: String, index: true, sparse: true },
   avatarUrl: String,
-
-  // Para auditar proveedor
   authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
   
-  // Para manejo de sesiones (sesión única por usuario)
   sessionToken: {
     type: String,
     default: null,
@@ -82,32 +77,50 @@ const usuarioSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+
+  // NUEVO: Para usuarios creados por admin (pago manual)
+  pagoManual: {
+    type: Boolean,
+    default: false
+  },
+  creadoPorAdmin: {
+    type: Boolean,
+    default: false
+  },
+  requiereCambioPassword: {
+    type: Boolean,
+    default: false
+  },
+  passwordTemporal: {
+    type: String,
+    select: false,
+    default: null
+  }
 }, {
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// Virtual - ACTUALIZADO para verificar suscripción correctamente
+// Virtual - ACTUALIZADO
 usuarioSchema.virtual('estadoPago').get(function () {
   // Admin y coach siempre tienen acceso
   if (this.rol === 'admin' || this.rol === 'coach') return true;
 
-  // Si subscription está poblado (viene con populate)
+  // NUEVO: Usuarios de solo reservas con pago manual
+  if (this.rol === 'reservas' && this.pagoManual) return true;
+
+  // Verificar suscripción activa
   if (this.subscription && typeof this.subscription === 'object' && this.subscription.estado) {
     return this.subscription.estado === 'active' && this.subscription.currentPeriodEnd > new Date();
   }
 
-  // Si subscription no está poblado, no podemos saber (retornamos false por seguridad)
   return false;
 });
 
-// Índices
 usuarioSchema.index({ email: 1 }, { unique: true });
 usuarioSchema.index({ planPersonalizado: 1 });
 
-// Middleware para hashear password antes de guardar
 usuarioSchema.pre('save', async function (next) {
-  // si no hay password o no cambió, seguimos
   if (!this.isModified('password') || !this.password) return next();
   try {
     this.password = await bcrypt.hash(this.password, 10);
@@ -116,6 +129,5 @@ usuarioSchema.pre('save', async function (next) {
     next(e);
   }
 });
-
 
 module.exports = mongoose.model('Usuario', usuarioSchema);

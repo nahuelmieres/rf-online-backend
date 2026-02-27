@@ -53,35 +53,51 @@ const loginUsuario = async (req, res) => {
       return res.status(400).json({ mensaje: 'Email y contraseña obligatorios' });
     }
 
-    // Traigo el usuario SIN .populate() primero para poder modificarlo
     const usuario = await Usuario.findOne({ email: email.toLowerCase() })
-      .select('+password +googleId +sessionToken');
+      .select('+password +googleId +sessionToken +requiereCambioPassword +passwordTemporal');
 
     if (!usuario) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
     }
 
-    // Si la cuenta es solo Google (sin password), avisar
     if (!usuario.password) {
       return res.status(400).json({
         mensaje: 'Tu cuenta está vinculada a Google. Iniciá sesión con Google o restablecé la contraseña para crear una clave local.'
       });
     }
 
-    const coincide = await bcrypt.compare(password, usuario.password);
+    // ACTUALIZADO: Permitir login con password temporal
+    let coincide = false;
+    
+    if (usuario.requiereCambioPassword && usuario.passwordTemporal) {
+      // Verificar si es la password temporal (sin hash)
+      coincide = password === usuario.passwordTemporal;
+    }
+    
+    // Si no coincide con temporal, verificar con hash normal
+    if (!coincide) {
+      coincide = await bcrypt.compare(password, usuario.password);
+    }
+
     if (!coincide) {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
 
-    // NUEVO: Generar token de sesión único
+    // NUEVO: Si requiere cambio de contraseña, retornar estado especial
+    if (usuario.requiereCambioPassword) {
+      return res.status(200).json({ // Cambiado de 403 a 200
+        mensaje: 'Debes cambiar tu contraseña temporal',
+        requiereCambioPassword: true,
+        email: usuario.email
+      });
+    }
+
     const sessionToken = crypto.randomBytes(32).toString('hex');
 
-    // NUEVO: Actualizar sessionToken en BD (invalida sesiones anteriores)
     usuario.sessionToken = sessionToken;
     usuario.lastSessionDate = new Date();
     await usuario.save();
 
-    // DESPUÉS de guardar, popular planPersonalizado para el payload
     await usuario.populate({ path: 'planPersonalizado', select: '_id titulo tipo' });
 
     const payload = {
@@ -90,7 +106,8 @@ const loginUsuario = async (req, res) => {
       rol: usuario.rol,
       nombre: usuario.nombre,
       planPersonalizado: usuario.planPersonalizado || null,
-      sessionToken // NUEVO: Incluir en JWT
+      sessionToken,
+      pagoManual: usuario.pagoManual || false
     };
 
     const tokenDuration = rememberMe ? '30d' : '8h';
@@ -104,6 +121,36 @@ const loginUsuario = async (req, res) => {
     });
   } catch (error) {
     console.error('Error en login:', error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
+// NUEVO: Activar/desactivar pago manual
+const togglePagoManual = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pagoManual } = req.body;
+
+    if (req.usuario.rol !== 'admin') {
+      return res.status(403).json({ mensaje: 'Solo administradores pueden modificar pagos manuales' });
+    }
+
+    const usuario = await Usuario.findByIdAndUpdate(
+      id,
+      { pagoManual: !!pagoManual },
+      { new: true }
+    ).select('-password');
+
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+
+    res.json({
+      mensaje: `Pago manual ${pagoManual ? 'activado' : 'desactivado'} correctamente`,
+      usuario
+    });
+  } catch (error) {
+    console.error('Error al actualizar pago manual:', error);
     res.status(500).json({ mensaje: 'Error del servidor' });
   }
 };
@@ -314,6 +361,103 @@ const logoutUsuario = async (req, res) => {
   }
 };
 
+// NUEVO: Crear usuario restringido (solo admin)
+const crearUsuarioReservas = async (req, res) => {
+  try {
+    const { nombre, email } = req.body;
+
+    // Validar que quien crea es admin
+    if (req.usuario.rol !== 'admin') {
+      return res.status(403).json({ mensaje: 'Solo administradores pueden crear usuarios de reservas' });
+    }
+
+    // Validaciones
+    if (!nombre || !email) {
+      return res.status(400).json({ mensaje: 'Nombre y email son requeridos' });
+    }
+
+    const usuarioExistente = await Usuario.findOne({ email: email.toLowerCase() });
+    if (usuarioExistente) {
+      return res.status(400).json({ mensaje: 'Ya existe un usuario con ese email' });
+    }
+
+    // Generar contraseña temporal
+    const passwordTemporal = crypto.randomBytes(4).toString('hex').toUpperCase(); // 8 caracteres
+
+    const nuevoUsuario = new Usuario({
+      nombre,
+      email: email.toLowerCase(),
+      password: passwordTemporal,
+      rol: 'reservas',
+      pagoManual: true,
+      creadoPorAdmin: true,
+      requiereCambioPassword: true,
+      passwordTemporal: passwordTemporal,
+      aceptaTerminos: true, // Auto-aceptados por el admin
+      authProvider: 'local'
+    });
+
+    await nuevoUsuario.save();
+
+    res.status(201).json({
+      mensaje: 'Usuario de reservas creado exitosamente',
+      usuario: {
+        id: nuevoUsuario._id,
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        rol: nuevoUsuario.rol,
+        passwordTemporal: passwordTemporal // Enviar al admin para que lo comparta
+      }
+    });
+  } catch (error) {
+    console.error('Error al crear usuario de reservas:', error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
+// NUEVO: Cambiar contraseña inicial
+const cambiarPasswordInicial = async (req, res) => {
+  try {
+    const { email, passwordTemporal, nuevaPassword } = req.body;
+
+    if (!email || !passwordTemporal || !nuevaPassword) {
+      return res.status(400).json({ mensaje: 'Todos los campos son requeridos' });
+    }
+
+    if (nuevaPassword.length < 8) {
+      return res.status(400).json({ mensaje: 'La nueva contraseña debe tener al menos 8 caracteres' });
+    }
+
+    // Buscar usuario
+    const usuario = await Usuario.findOne({ email: email.toLowerCase() })
+      .select('+password +passwordTemporal');
+
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+    }
+
+    if (!usuario.requiereCambioPassword) {
+      return res.status(400).json({ mensaje: 'Este usuario no requiere cambio de contraseña' });
+    }
+
+    // Verificar password temporal
+    if (usuario.passwordTemporal !== passwordTemporal) {
+      return res.status(401).json({ mensaje: 'Contraseña temporal incorrecta' });
+    }
+
+    // Actualizar contraseña
+    usuario.password = nuevaPassword;
+    usuario.requiereCambioPassword = false;
+    usuario.passwordTemporal = null;
+    await usuario.save();
+
+    res.json({ mensaje: 'Contraseña actualizada correctamente. Ya podés iniciar sesión.' });
+  } catch (error) {
+    console.error('Error al cambiar contraseña:', error);
+    res.status(500).json({ mensaje: 'Error del servidor' });
+  }
+};
+
 module.exports = {
   registrarUsuario,
   loginUsuario,
@@ -322,5 +466,8 @@ module.exports = {
   obtenerPerfil,
   obtenerUsuarios,
   cambiarRolUsuario,
-  obtenerPlanRequestsUsuario
+  obtenerPlanRequestsUsuario,
+  crearUsuarioReservas,
+  cambiarPasswordInicial,
+  togglePagoManual
 };
